@@ -150,7 +150,7 @@ export default function App() {
           <CreateMatchView 
             user={user}
             nickname={nickname}
-            pastEvents={events} // Pass all events to allow importing
+            pastEvents={events}
             goBack={() => setView('DASHBOARD')}
             onMatchCreated={(id) => {
               setCurrentEventId(id);
@@ -301,23 +301,20 @@ function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated })
     const newEventId = crypto.randomUUID();
     const eventRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id', 'public', 'data', 'events', newEventId);
     
-    // Default Teams Structure
     let teams = [
       { id: 't1', name: 'Squadra Rossa', players: [], scoreOffset: 0 },
       { id: 't2', name: 'Squadra Blu', players: [], scoreOffset: 0 }
     ];
 
-    // Import from past match if selected
     if (importId) {
       const matchToImport = pastEvents.find(e => e.id === importId);
       if (matchToImport && matchToImport.teams) {
-        // Deep clone teams and reset goals
         teams = matchToImport.teams.map(team => ({
           ...team,
           scoreOffset: 0,
           players: (team.players || []).map(player => ({
             ...player,
-            goals: 0 // Reset goals for the new match
+            goals: 0
           }))
         }));
       }
@@ -409,7 +406,6 @@ function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated })
 function EventCard({ event, onClick }) {
   const isLive = event.status === 'live';
   
-  // Calculate total score dynamically for preview
   const getTeamScore = (team) => {
     const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
     return baseScore + (team.scoreOffset || 0);
@@ -442,7 +438,6 @@ function EventCard({ event, onClick }) {
         )}
       </div>
       
-      {/* Score Preview */}
       <div className="flex items-center justify-between bg-slate-900/60 rounded-lg p-3">
         <div className="flex flex-col items-center flex-1">
           <span className="text-xs font-semibold text-rose-400 mb-1 truncate w-full text-center">{event.teams[0].name}</span>
@@ -466,7 +461,6 @@ function EventView({ event, user, goBack }) {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerJersey, setNewPlayerJersey] = useState('');
 
-  // State per l'editing del titolo evento
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(event.title);
 
@@ -474,13 +468,10 @@ function EventView({ event, user, goBack }) {
     setTempTitle(event.title);
   }, [event.title]);
 
-  // Utility to calculate total score dynamically (Spostato qui in alto per poterlo usare nelle funzioni Admin)
   const getTeamScore = (team) => {
     const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
     return baseScore + (team.scoreOffset || 0);
   };
-
-  // -- ADMIN ACTIONS --
 
   const updateEventData = async (newData) => {
     const eventRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id', 'public', 'data', 'events', event.id);
@@ -500,7 +491,6 @@ function EventView({ event, user, goBack }) {
     if (!isAdmin) return;
     const updates = { status };
     
-    // Log per la fine della partita
     if (status === 'ended' && event.status === 'live') {
       const scoreA = getTeamScore(event.teams[0]);
       const scoreB = getTeamScore(event.teams[1]);
@@ -524,7 +514,6 @@ function EventView({ event, user, goBack }) {
     updateEventData({ teams: newTeams });
   };
 
-  // Player Management
   const openAddPlayerModal = (teamIndex) => {
     if (!isAdmin || !isLive) return;
     setPlayerModal({ isOpen: true, teamIndex });
@@ -561,7 +550,7 @@ function EventView({ event, user, goBack }) {
     const player = newTeams[teamIndex].players.find(p => p.id === playerId);
     if (player) {
       const newGoals = player.goals + delta;
-      if (newGoals >= 0) { // No negative goals
+      if (newGoals >= 0) {
         player.goals = newGoals;
         
         let newTimeline = event.timeline || [];
@@ -605,7 +594,6 @@ function EventView({ event, user, goBack }) {
     updateEventData({ teams: newTeams });
   };
 
-  // -- SPECTATOR ACTIONS --
   const addReaction = (type) => {
     const newReactions = { ...event.reactions };
     newReactions[type] = (newReactions[type] || 0) + 1;
@@ -616,7 +604,7 @@ function EventView({ event, user, goBack }) {
     const scoreA = getTeamScore(event.teams[0]);
     const scoreB = getTeamScore(event.teams[1]);
     let text = `🏆 *${event.title}*\n\n`;
-    text += `🔴 *${event.teams[0].name}*  ${scoreA} - ${scoreB}  *${event.teams[1].name}* 🔵\n\n`;
+    text += `🔴 *${event.teams[0].name}* ${scoreA} - ${scoreB} *${event.teams[1].name}* 🔵\n\n`;
     text += `⚽ *Marcatori:*\n`;
     
     event.teams.forEach((team, idx) => {
@@ -638,7 +626,6 @@ function EventView({ event, user, goBack }) {
   return (
     <div className="animate-in slide-in-from-right-4 duration-300 flex flex-col min-h-[85vh]">
       
-      {/* Top Bar */}
       <div className="flex justify-between items-center mb-4 w-full">
         <button 
           onClick={goBack}
@@ -655,13 +642,10 @@ function EventView({ event, user, goBack }) {
         </button>
       </div>
 
-      {/* Main Scoreboard Arena */}
       <div className="bg-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl border border-slate-700 relative overflow-hidden flex-1 flex flex-col">
         
-        {/* Decorative Top Gradient */}
         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80"></div>
 
-        {/* Header */}
         <div className="text-center mb-6 mt-2 relative group/title flex flex-col items-center">
           {isAdmin && isEditingTitle ? (
             <input
@@ -698,7 +682,6 @@ function EventView({ event, user, goBack }) {
           </div>
         </div>
 
-        {/* Global Teams Score & Players (Side by Side) */}
         <div className="flex gap-4 md:gap-8 flex-1">
           {event.teams.map((team, index) => (
             <TeamColumn 
@@ -718,7 +701,6 @@ function EventView({ event, user, goBack }) {
         </div>
       </div>
 
-      {/* Timeline Section */}
       {(event.timeline && event.timeline.length > 0) && (
         <div className="mt-6 bg-slate-800/80 rounded-xl p-4 border border-slate-700 max-h-48 overflow-y-auto">
           <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-3">
@@ -755,7 +737,6 @@ function EventView({ event, user, goBack }) {
         </div>
       )}
 
-      {/* Admin Controls Panel */}
       {isAdmin && (
         <div className={`mt-4 rounded-xl p-4 flex justify-between items-center border shadow-lg ${isLive ? 'bg-slate-800/80 border-red-500/20' : 'bg-slate-800/80 border-emerald-500/20'}`}>
           <div className="text-sm">
@@ -781,7 +762,6 @@ function EventView({ event, user, goBack }) {
         </div>
       )}
 
-      {/* Reactions Bar (For Everyone) */}
       <div className="mt-8 mb-4">
         <h3 className="text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Reazioni Pubblico</h3>
         <div className="flex justify-center gap-6">
@@ -792,7 +772,6 @@ function EventView({ event, user, goBack }) {
         </div>
       </div>
 
-      {/* Add Player Modal */}
       {playerModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -840,9 +819,6 @@ function EventView({ event, user, goBack }) {
   );
 }
 
-// -----------------------------------------------------
-// Component for a Single Team Column (Red vs Blue side)
-// -----------------------------------------------------
 function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, openAddPlayerModal, removePlayer, updatePlayerGoal, updateTeamOffset }) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(team.name);
@@ -885,9 +861,7 @@ function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, o
   return (
     <div className={`flex-1 flex flex-col rounded-2xl border ${theme.border} bg-gradient-to-b ${theme.gradient} overflow-hidden`}>
       
-      {/* Team Header & Total Score */}
       <div className={`p-4 text-center border-b ${theme.border} ${theme.bg}`}>
-        {/* Editable Name */}
         <div className="h-8 flex items-center justify-center mb-1">
           {isAdmin && isLive ? (
             isEditingName ? (
@@ -915,7 +889,6 @@ function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, o
           )}
         </div>
         
-        {/* Global Score Big */}
         <div className="flex justify-center items-center gap-2 group/score">
           {isAdmin && isLive && isEditingScore ? (
             <input 
@@ -944,7 +917,6 @@ function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, o
         </div>
       </div>
 
-      {/* Players List */}
       <div className="flex-1 p-2 md:p-3 overflow-y-auto space-y-2 min-h-[150px]">
         {players.length === 0 ? (
           <div className="text-center text-xs text-slate-500 mt-4 italic">Nessun giocatore</div>
@@ -957,7 +929,6 @@ function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, o
                   {player.name}
                   {player.jersey && <span className="ml-1.5 text-xs text-slate-500 font-mono bg-slate-800 px-1 py-0.5 rounded">#{player.jersey}</span>}
                 </span>
-                {/* Delete Button (visible for admin on hover or mobile) */}
                 {isAdmin && isLive && (
                   <button 
                     onClick={() => removePlayer(index, player.id)}
@@ -969,7 +940,6 @@ function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, o
                 )}
               </div>
               
-              {/* Scoring Controls */}
               <div className="flex items-center justify-between bg-slate-950/50 rounded-lg p-1">
                 {isAdmin && isLive ? (
                   <>
@@ -995,7 +965,6 @@ function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, o
         )}
       </div>
 
-      {/* Add Player Input (Admin only) */}
       {isAdmin && isLive && (
         <div className="p-2 md:p-3 border-t border-slate-700/50 bg-slate-900/30">
           <button 
