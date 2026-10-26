@@ -575,10 +575,11 @@ export default function EventView({ event, user, goBack }) {
       <div className="mt-8 mb-4">
         <h3 className="text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Reazioni Pubblico</h3>
         <div className="grid grid-cols-4 gap-3 md:gap-4 justify-items-center max-w-sm mx-auto">
-          {EMOJI_LIST.map((emoji) => (
+          {EMOJI_LIST.map((emoji, idx) => (
              <ReactionButton 
                 key={emoji} 
                 emoji={emoji} 
+                index={idx}
                 count={event.reactions?.[emoji] || 0} 
                 onClick={() => addEmojiReaction(event.id, emoji)} 
              />
