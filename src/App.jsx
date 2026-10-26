@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2, ChevronDown, ChevronUp, Palette } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2, ChevronDown, ChevronUp, Palette, UserMinus } from 'lucide-react';
 
 // --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
@@ -470,6 +470,9 @@ function EventView({ event, user, goBack }) {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerJersey, setNewPlayerJersey] = useState('');
 
+  // Stato per il popup di conferma rimozione giocatore
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState({ isOpen: false, teamIndex: null, playerId: null, playerName: '' });
+
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(event.title);
 
@@ -564,11 +567,24 @@ function EventView({ event, user, goBack }) {
     setPlayerModal({ isOpen: false, teamIndex: null });
   };
 
-  const removePlayer = (teamIndex, playerId) => {
+  const promptRemovePlayer = (teamIndex, player) => {
     if (!isAdmin || !isLive) return;
+    setDeleteConfirmModal({
+      isOpen: true,
+      teamIndex,
+      playerId: player.id,
+      playerName: player.name
+    });
+  };
+
+  const executeRemovePlayer = () => {
+    const { teamIndex, playerId } = deleteConfirmModal;
+    if (teamIndex === null || !playerId) return;
+
     const newTeams = [...event.teams];
     newTeams[teamIndex].players = newTeams[teamIndex].players.filter(p => p.id !== playerId);
     updateEventData({ teams: newTeams });
+    setDeleteConfirmModal({ isOpen: false, teamIndex: null, playerId: null, playerName: '' });
   };
 
   const updatePlayerGoal = (teamIndex, playerId, delta) => {
@@ -782,14 +798,23 @@ function EventView({ event, user, goBack }) {
                   ) : (
                     event.teams[0].players.map(player => (
                       <div key={player.id} className="flex justify-between items-center py-3">
-                        <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          {isAdmin && isLive && (
+                            <button 
+                              onClick={() => promptRemovePlayer(0, player)}
+                              className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg bg-slate-950/40 hover:bg-red-500/10 transition-colors"
+                              title="Rimuovi giocatore"
+                            >
+                              <UserMinus className="w-4 h-4" />
+                            </button>
+                          )}
                           <span className="font-medium text-slate-200 text-sm">
                             {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono">#{player.jersey}</span>}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
                           {isAdmin && isLive ? (
-                            <div className="flex items-center gap-1 mr-2 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
+                            <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
                               <button 
                                 onClick={() => updatePlayerGoal(0, player.id, -1)}
                                 className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
@@ -800,13 +825,6 @@ function EventView({ event, user, goBack }) {
                                 className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold"
                                 style={{ backgroundColor: `${color0}50` }}
                               >+</button>
-                              <button 
-                                onClick={() => removePlayer(0, player.id)}
-                                className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 ml-1"
-                                title="Rimuovi"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
                             </div>
                           ) : (
                             <div className="font-bold text-lg" style={{ color: color0 }}>{player.goals}</div>
@@ -852,14 +870,23 @@ function EventView({ event, user, goBack }) {
                   ) : (
                     event.teams[1].players.map(player => (
                       <div key={player.id} className="flex justify-between items-center py-3">
-                        <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          {isAdmin && isLive && (
+                            <button 
+                              onClick={() => promptRemovePlayer(1, player)}
+                              className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg bg-slate-950/40 hover:bg-red-500/10 transition-colors"
+                              title="Rimuovi giocatore"
+                            >
+                              <UserMinus className="w-4 h-4" />
+                            </button>
+                          )}
                           <span className="font-medium text-slate-200 text-sm">
                             {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono">#{player.jersey}</span>}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
                           {isAdmin && isLive ? (
-                            <div className="flex items-center gap-1 mr-2 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
+                            <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
                               <button 
                                 onClick={() => updatePlayerGoal(1, player.id, -1)}
                                 className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
@@ -870,13 +897,6 @@ function EventView({ event, user, goBack }) {
                                 className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold"
                                 style={{ backgroundColor: `${color1}50` }}
                               >+</button>
-                              <button 
-                                onClick={() => removePlayer(1, player.id)}
-                                className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 ml-1"
-                                title="Rimuovi"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
                             </div>
                           ) : (
                             <div className="font-bold text-lg" style={{ color: color1 }}>{player.goals}</div>
@@ -1070,6 +1090,32 @@ function EventView({ event, user, goBack }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Popup Conferma Eliminazione Giocatore */}
+      {deleteConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+            <h3 className="text-lg font-bold text-white mb-2">Rimuovi Giocatore</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              Vuoi davvero rimuovere <span className="font-bold text-white">{deleteConfirmModal.playerName}</span> dalla partita?
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setDeleteConfirmModal({ isOpen: false, teamIndex: null, playerId: null, playerName: '' })}
+                className="w-1/2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl py-2.5 transition-colors"
+              >
+                Annulla
+              </button>
+              <button 
+                onClick={executeRemovePlayer}
+                className="w-1/2 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl py-2.5 transition-colors"
+              >
+                Cancella
+              </button>
+            </div>
           </div>
         </div>
       )}
