@@ -5,7 +5,6 @@ import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc } from 'fi
 import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2 } from 'lucide-react';
 
 // --- FIREBASE INITIALIZATION ---
-// Rule 1, 2 & 3 Compliance
 const firebaseConfig = {
   apiKey: "AIzaSyClg1kzzyWAQ-0cwl78pg2sgHHCwMCFQ_w",
   authDomain: "kicker-count.firebaseapp.com",
@@ -21,17 +20,14 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id';
 
 export default function App() {
-  // Application State
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [nickname, setNickname] = useState(localStorage.getItem('kicker_nickname') || '');
   const [view, setView] = useState(nickname ? 'DASHBOARD' : 'LOGIN'); // LOGIN, DASHBOARD, CREATE, EVENT
   
-  // Data State
   const [events, setEvents] = useState([]);
   const [currentEventId, setCurrentEventId] = useState(null);
 
-  // 1. Auth Setup (Rule 3)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -54,21 +50,17 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Data Fetching (Rule 1 & 2)
   useEffect(() => {
     if (!user) return;
 
-    // Strict Path: /artifacts/{appId}/public/data/events
     const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
     
-    // No complex queries, fetch all and sort in memory
     const unsubscribe = onSnapshot(eventsRef, (snapshot) => {
       const fetchedEvents = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
-      // Sort: Live first, then by date descending
       fetchedEvents.sort((a, b) => {
         if (a.status === 'live' && b.status !== 'live') return -1;
         if (a.status !== 'live' && b.status === 'live') return 1;
@@ -83,8 +75,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- ACTIONS ---
-
   const handleLogin = (e) => {
     e.preventDefault();
     const cleanNick = nickname.trim();
@@ -97,8 +87,6 @@ export default function App() {
 
   const currentEvent = events.find(e => e.id === currentEventId);
 
-  // --- VIEWS ---
-
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
@@ -110,7 +98,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-emerald-500/30">
       
-      {/* HEADER */}
       <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-20 shadow-md">
         <div className="max-w-xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-xl tracking-tight cursor-pointer" onClick={() => setView('DASHBOARD')}>
@@ -231,7 +218,6 @@ function DashboardView({ events, goToCreate, openEvent }) {
   return (
     <div className="animate-in fade-in duration-300">
       
-      {/* Create Event CTA */}
       <div className="mb-8">
         <button 
           onClick={goToCreate}
@@ -250,7 +236,6 @@ function DashboardView({ events, goToCreate, openEvent }) {
       </div>
 
       <div className="space-y-6">
-        {/* LIVE EVENTS */}
         <section>
           <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
@@ -270,7 +255,6 @@ function DashboardView({ events, goToCreate, openEvent }) {
           )}
         </section>
 
-        {/* PAST EVENTS */}
         {pastEvents.length > 0 && (
           <section>
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 mt-8 flex items-center gap-2">
@@ -457,6 +441,7 @@ function EventView({ event, user, goBack }) {
   const isAdmin = user && event.adminId === user.uid;
   const isLive = event.status === 'live';
   
+  const [showPlayers, setShowPlayers] = useState(true);
   const [playerModal, setPlayerModal] = useState({ isOpen: false, teamIndex: null });
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerJersey, setNewPlayerJersey] = useState('');
@@ -682,23 +667,147 @@ function EventView({ event, user, goBack }) {
           </div>
         </div>
 
-        <div className="flex gap-4 md:gap-8 flex-1">
-          {event.teams.map((team, index) => (
-            <TeamColumn 
-              key={team.id}
-              team={team}
-              index={index}
-              teamScore={getTeamScore(team)}
-              isAdmin={isAdmin}
-              isLive={isLive}
-              updateTeamName={updateTeamName}
-              openAddPlayerModal={() => openAddPlayerModal(index)}
-              removePlayer={removePlayer}
-              updatePlayerGoal={updatePlayerGoal}
-              updateTeamOffset={updateTeamOffset}
-            />
-          ))}
+        {/* Tabellone Punteggio e Formazioni in stile Spettatore / Partecipante */}
+        <div className="w-full space-y-4">
+          
+          <div className="bg-slate-900/60 rounded-2xl p-4 border border-slate-700">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col items-center w-2/5">
+                 <span className="text-rose-400 font-semibold mb-1 text-xs md:text-sm truncate max-w-full">{event.teams[0].name}</span>
+                 <div className="text-4xl md:text-6xl font-black text-white">{getTeamScore(event.teams[0])}</div>
+              </div>
+              <div className="text-xl font-bold text-slate-500">VS</div>
+              <div className="flex flex-col items-center w-2/5">
+                 <span className="text-blue-400 font-semibold mb-1 text-xs md:text-sm truncate max-w-full">{event.teams[1].name}</span>
+                 <div className="text-4xl md:text-6xl font-black text-white">{getTeamScore(event.teams[1])}</div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowPlayers(!showPlayers)}
+            className="w-full py-2.5 bg-slate-900/40 hover:bg-slate-900 border border-slate-700 rounded-xl text-sm font-semibold text-slate-300 transition-colors flex justify-center items-center gap-2"
+          >
+            {showPlayers ? 'Nascondi Formazioni ↑' : 'Mostra Formazioni ↓'}
+          </button>
+
+          {showPlayers && (
+            <div className="space-y-4 transition-all">
+              
+              {/* Blocco Squadra Rossa */}
+              <div className="bg-slate-900/40 rounded-xl border border-rose-500/20 overflow-hidden shadow-md">
+                <div className="bg-rose-500/10 px-4 py-2 text-rose-400 font-bold text-xs tracking-wider flex justify-between items-center">
+                  <span>{event.teams[0].name.toUpperCase()}</span>
+                  {isAdmin && isLive && (
+                    <button 
+                      onClick={() => openAddPlayerModal(0)} 
+                      className="text-xs bg-rose-500/20 hover:bg-rose-500/30 px-2 py-0.5 rounded text-rose-300 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Aggiungi
+                    </button>
+                  )}
+                </div>
+                <div className="divide-y divide-slate-700/50 px-4">
+                  {(!event.teams[0].players || event.teams[0].players.length === 0) ? (
+                    <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
+                  ) : (
+                    event.teams[0].players.map(player => (
+                      <div key={player.id} className="flex justify-between items-center py-3">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-200 text-sm">
+                            {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono">#{player.jersey}</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {isAdmin && isLive && (
+                            <div className="flex items-center gap-1 mr-2 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
+                              <button 
+                                onClick={() => updatePlayerGoal(0, player.id, -1)}
+                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
+                              >-</button>
+                              <span className="w-6 text-center text-sm font-bold text-rose-400">{player.goals}</span>
+                              <button 
+                                onClick={() => updatePlayerGoal(0, player.id, 1)}
+                                className="w-7 h-7 flex items-center justify-center rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-sm font-bold"
+                              >+</button>
+                              <button 
+                                onClick={() => removePlayer(0, player.id)}
+                                className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 ml-1"
+                                title="Rimuovi"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          {!isAdmin && (
+                            <div className="font-bold text-lg text-rose-400">{player.goals}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Blocco Squadra Blu */}
+              <div className="bg-slate-900/40 rounded-xl border border-blue-500/20 overflow-hidden shadow-md">
+                <div className="bg-blue-500/10 px-4 py-2 text-blue-400 font-bold text-xs tracking-wider flex justify-between items-center">
+                  <span>{event.teams[1].name.toUpperCase()}</span>
+                  {isAdmin && isLive && (
+                    <button 
+                      onClick={() => openAddPlayerModal(1)} 
+                      className="text-xs bg-blue-500/20 hover:bg-blue-500/30 px-2 py-0.5 rounded text-blue-300 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Aggiungi
+                    </button>
+                  )}
+                </div>
+                <div className="divide-y divide-slate-700/50 px-4">
+                  {(!event.teams[1].players || event.teams[1].players.length === 0) ? (
+                    <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
+                  ) : (
+                    event.teams[1].players.map(player => (
+                      <div key={player.id} className="flex justify-between items-center py-3">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-200 text-sm">
+                            {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono">#{player.jersey}</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {isAdmin && isLive && (
+                            <div className="flex items-center gap-1 mr-2 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
+                              <button 
+                                onClick={() => updatePlayerGoal(1, player.id, -1)}
+                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
+                              >-</button>
+                              <span className="w-6 text-center text-sm font-bold text-blue-400">{player.goals}</span>
+                              <button 
+                                onClick={() => updatePlayerGoal(1, player.id, 1)}
+                                className="w-7 h-7 flex items-center justify-center rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 text-sm font-bold"
+                              >+</button>
+                              <button 
+                                onClick={() => removePlayer(1, player.id)}
+                                className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 ml-1"
+                                title="Rimuovi"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          {!isAdmin && (
+                            <div className="font-bold text-lg text-blue-400">{player.goals}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
         </div>
+
       </div>
 
       {(event.timeline && event.timeline.length > 0) && (
@@ -815,166 +924,6 @@ function EventView({ event, user, goBack }) {
         </div>
       )}
 
-    </div>
-  );
-}
-
-function TeamColumn({ team, index, teamScore, isAdmin, isLive, updateTeamName, openAddPlayerModal, removePlayer, updatePlayerGoal, updateTeamOffset }) {
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [tempName, setTempName] = useState(team.name);
-  
-  const [isEditingScore, setIsEditingScore] = useState(false);
-  const [tempScore, setTempScore] = useState(teamScore);
-
-  useEffect(() => {
-    setTempScore(teamScore);
-  }, [teamScore]);
-
-  const handleNameSave = () => {
-    if (tempName.trim()) {
-      updateTeamName(index, tempName);
-    } else {
-      setTempName(team.name);
-    }
-    setIsEditingName(false);
-  };
-
-  const handleScoreSave = () => {
-    const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
-    const parsed = parseInt(tempScore, 10);
-    const newTotal = isNaN(parsed) ? baseScore : parsed;
-    updateTeamOffset(index, newTotal - baseScore);
-    setIsEditingScore(false);
-  };
-
-  const isLeft = index === 0;
-  const theme = isLeft ? {
-    color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', buttonHover: 'hover:bg-rose-500/20',
-    gradient: 'from-rose-500/5 to-transparent'
-  } : {
-    color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', buttonHover: 'hover:bg-blue-500/20',
-    gradient: 'from-blue-500/5 to-transparent'
-  };
-
-  const players = team.players || [];
-
-  return (
-    <div className={`flex-1 flex flex-col rounded-2xl border ${theme.border} bg-gradient-to-b ${theme.gradient} overflow-hidden`}>
-      
-      <div className={`p-4 text-center border-b ${theme.border} ${theme.bg}`}>
-        <div className="h-8 flex items-center justify-center mb-1">
-          {isAdmin && isLive ? (
-            isEditingName ? (
-              <input 
-                autoFocus
-                value={tempName}
-                onChange={e => setTempName(e.target.value)}
-                onBlur={handleNameSave}
-                onKeyDown={e => e.key === 'Enter' && handleNameSave()}
-                className="w-full max-w-[120px] bg-slate-900 border border-slate-600 rounded text-center text-sm font-bold text-white px-1 py-0.5 focus:outline-none focus:border-emerald-500"
-              />
-            ) : (
-              <div 
-                onClick={() => setIsEditingName(true)}
-                className={`text-sm md:text-base font-bold truncate cursor-pointer border-b border-dashed border-slate-500/50 pb-0.5 ${theme.color} hover:text-white transition-colors`}
-                title="Modifica nome squadra"
-              >
-                {team.name}
-              </div>
-            )
-          ) : (
-            <div className={`text-sm md:text-base font-bold truncate ${theme.color}`}>
-              {team.name}
-            </div>
-          )}
-        </div>
-        
-        <div className="flex justify-center items-center gap-2 group/score">
-          {isAdmin && isLive && isEditingScore ? (
-            <input 
-              autoFocus
-              type="number"
-              value={tempScore}
-              onChange={e => setTempScore(e.target.value)}
-              onBlur={handleScoreSave}
-              onKeyDown={e => e.key === 'Enter' && handleScoreSave()}
-              className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-5xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
-            />
-          ) : (
-            <div className="text-5xl md:text-6xl font-black text-white drop-shadow-md flex items-center relative justify-center">
-              {teamScore}
-              {isAdmin && isLive && (
-                <button 
-                  onClick={() => setIsEditingScore(true)}
-                  className="absolute -right-8 text-slate-500 hover:text-emerald-400 opacity-0 group-hover/score:opacity-100 transition-opacity"
-                  title="Modifica manualmente il punteggio totale"
-                >
-                  <Edit2 className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 p-2 md:p-3 overflow-y-auto space-y-2 min-h-[150px]">
-        {players.length === 0 ? (
-          <div className="text-center text-xs text-slate-500 mt-4 italic">Nessun giocatore</div>
-        ) : (
-          players.map(player => (
-            <div key={player.id} className="bg-slate-900/60 rounded-xl p-2 md:p-3 flex flex-col gap-2 border border-slate-700/50 relative group">
-              
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-slate-200 truncate pr-2 flex-1">
-                  {player.name}
-                  {player.jersey && <span className="ml-1.5 text-xs text-slate-500 font-mono bg-slate-800 px-1 py-0.5 rounded">#{player.jersey}</span>}
-                </span>
-                {isAdmin && isLive && (
-                  <button 
-                    onClick={() => removePlayer(index, player.id)}
-                    className="text-slate-600 hover:text-red-400 transition-colors p-1"
-                    title="Rimuovi giocatore"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              
-              <div className="flex items-center justify-between bg-slate-950/50 rounded-lg p-1">
-                {isAdmin && isLive ? (
-                  <>
-                    <button 
-                      onClick={() => updatePlayerGoal(index, player.id, -1)}
-                      className="w-8 h-8 flex items-center justify-center rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors active:scale-95"
-                    >-</button>
-                    <span className={`text-xl font-bold ${theme.color}`}>{player.goals}</span>
-                    <button 
-                      onClick={() => updatePlayerGoal(index, player.id, 1)}
-                      className={`w-8 h-8 flex items-center justify-center rounded-md ${theme.bg} ${theme.color} font-bold ${theme.buttonHover} hover:text-white transition-colors active:scale-95`}
-                    >+</button>
-                  </>
-                ) : (
-                  <div className="w-full text-center">
-                    <span className="text-xs text-slate-500 mr-2">Gol:</span>
-                    <span className={`text-xl font-bold ${theme.color}`}>{player.goals}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {isAdmin && isLive && (
-        <div className="p-2 md:p-3 border-t border-slate-700/50 bg-slate-900/30">
-          <button 
-            onClick={openAddPlayerModal}
-            className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:text-white ${theme.buttonHover} transition-colors text-sm font-medium`}
-          >
-            <Plus className="w-4 h-4" /> Aggiungi Giocatore
-          </button>
-        </div>
-      )}
     </div>
   );
 }
