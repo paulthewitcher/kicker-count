@@ -20,16 +20,15 @@ const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 
       for (let j = 0; j < bursts; j++) {
         setTimeout(() => {
           const id = Date.now() + Math.random();
-          // 25 particelle ad ampiezza espansa a sinistra e destra e durata prolungata
           const newParticles = Array.from({ length: 25 }).map((_, i) => {
-            const startX = (Math.random() - 0.5) * 160; // Spostamento iniziale più ampio
-            const endX = baseDrift + (Math.random() - 0.5) * 260; // Ampiezza finale estesa a tutto lo schermo
+            const startX = (Math.random() - 0.5) * 160;
+            const endX = baseDrift + (Math.random() - 0.5) * 260;
             return {
               id: `${id}-${i}`,
               startX,
               endX,
               scale: 0.85 + Math.random() * 1.1,
-              duration: 4.2 + Math.random() * 1.6, // Durata estesa di 2+ secondi
+              duration: 4.2 + Math.random() * 1.6,
               delay: Math.random() * 0.5,
               rotation: (Math.random() - 0.5) * 80
             };

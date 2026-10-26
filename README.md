@@ -1,6 +1,6 @@
-# KickerLive (Versione Ottimizzata Real-Time con Effetti Avanzati)
+# KickerLive (Multi-Tenant Seed Version)
 
-App web per il monitoraggio e la gestione in tempo reale di partite di biliardino.
+App web per il monitoraggio e la gestione in tempo reale di partite di biliardino con gestione stanze tramite **Seed**.
 
 ## Istruzioni per l'avvio in VS Code
 

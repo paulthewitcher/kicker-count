@@ -1,20 +1,21 @@
 import { db, appId } from './firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, increment } from 'firebase/firestore';
 
-export const subscribeToEvents = (onEventsUpdate, onError) => {
+export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
   const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
   return onSnapshot(eventsRef, (snapshot) => {
-    const fetchedEvents = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const cleanSeed = (seed || '').trim().toLowerCase();
     
+    const fetchedEvents = snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(evt => (evt.seed || '').trim().toLowerCase() === cleanSeed);
+
     fetchedEvents.sort((a, b) => {
       if (a.status === 'live' && b.status !== 'live') return -1;
       if (a.status !== 'live' && b.status === 'live') return 1;
       return b.createdAt - a.createdAt;
     });
-    
+
     onEventsUpdate(fetchedEvents);
   }, onError);
 };
@@ -29,7 +30,7 @@ export const subscribeToSingleEvent = (eventId, onEventUpdate, onError) => {
   }, onError);
 };
 
-export const createEvent = async ({ user, nickname, title, importId, pastEvents }) => {
+export const createEvent = async ({ user, nickname, seed, title, importId, pastEvents }) => {
   const newEventId = crypto.randomUUID();
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', newEventId);
   
@@ -57,6 +58,7 @@ export const createEvent = async ({ user, nickname, title, importId, pastEvents 
     title: title.trim() || 'Nuova Partita',
     adminId: user.uid,
     adminName: nickname,
+    seed: (seed || '').trim().toLowerCase(),
     status: 'live',
     createdAt: Date.now(),
     teams: teams,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
-import { ArrowLeft, Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus, Clock, Trash2, Check, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus, Clock, Trash2, Check, RotateCcw, Hash } from 'lucide-react';
 import { EMOJI_LIST } from '../utils/constants';
 import { getTeamScore, getSortedPlayers } from '../utils/helpers';
 import { updateEventData, addEmojiReaction, subscribeToSingleEvent } from '../services/eventService';
@@ -175,7 +175,6 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
             timestamp: now.getTime()
           }, ...newTimeline];
 
-          // Incrementa la reazione pallone in Firestore (sincronizzato su tutti i dispositivi)
           addEmojiReaction(event.id, '⚽');
         } else if (delta < 0) {
           newTimeline = [{
@@ -201,7 +200,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
   const shareOnWhatsApp = () => {
     const scoreA = getTeamScore(event.teams[0]);
     const scoreB = getTeamScore(event.teams[1]);
-    let text = `🏆 *${event.title}*
+    let text = `🏆 *${event.title}* (Stanza #${event.seed || 'default'})
 
 `;
     text += `🔴 *${event.teams[0].name}* ${scoreA} - ${scoreB} *${event.teams[1].name}* 🔵
@@ -286,6 +285,9 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
             ) : (
               <span className="bg-slate-700 text-slate-300 text-xs font-bold px-2 py-1 rounded">TERMINATA</span>
             )}
+            <span className="text-xs font-mono font-semibold text-emerald-400/80 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+              <Hash className="w-3 h-3" /> {event.seed || 'default'}
+            </span>
             <span className="text-xs text-slate-500">Arbitro: {event.adminName}</span>
           </div>
         </div>

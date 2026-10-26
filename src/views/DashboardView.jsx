@@ -1,13 +1,33 @@
 import React, { memo } from 'react';
-import { Plus, History } from 'lucide-react';
+import { Plus, History, Hash } from 'lucide-react';
 import EventCard from '../components/EventCard';
 
-const DashboardView = memo(function DashboardView({ events, goToCreate, openEvent }) {
+const DashboardView = memo(function DashboardView({ events, seed, goToCreate, openEvent, onOpenSeedModal }) {
   const liveEvents = events.filter(e => e.status === 'live');
   const pastEvents = events.filter(e => e.status === 'ended');
 
   return (
     <div className="animate-in fade-in duration-300">
+      
+      {/* Banner Seed Attivo */}
+      <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 mb-6 flex justify-between items-center">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-400 font-mono">
+            <Hash className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Stanza Attiva</span>
+            <span className="text-sm font-bold text-emerald-400 font-mono">{seed}</span>
+          </div>
+        </div>
+        <button
+          onClick={onOpenSeedModal}
+          className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg font-medium transition-colors"
+        >
+          Cambia Seed
+        </button>
+      </div>
+
       <div className="mb-8">
         <button 
           onClick={goToCreate}
@@ -16,7 +36,7 @@ const DashboardView = memo(function DashboardView({ events, goToCreate, openEven
           <div className="bg-slate-900/40 rounded-xl px-4 py-4 flex items-center justify-between group-hover:bg-transparent transition-all">
             <div className="flex flex-col text-left">
               <span className="text-white font-bold text-lg">Nuova Partita</span>
-              <span className="text-emerald-100 text-sm opacity-90">Crea o importa un evento</span>
+              <span className="text-emerald-100 text-sm opacity-90">Crea o importa un evento in questa stanza</span>
             </div>
             <div className="bg-white/20 p-2 rounded-full backdrop-blur-sm group-hover:rotate-90 transition-transform">
               <Plus className="w-6 h-6 text-white" />
@@ -34,7 +54,7 @@ const DashboardView = memo(function DashboardView({ events, goToCreate, openEven
           
           {liveEvents.length === 0 ? (
             <div className="text-center p-6 border border-dashed border-slate-700 rounded-xl text-slate-500 text-sm">
-              Nessuna partita in corso in questo momento.
+              Nessuna partita in corso per la stanza <span className="font-mono text-emerald-400 font-bold">#{seed}</span>.
             </div>
           ) : (
             <div className="space-y-3">
