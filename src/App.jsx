@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2 } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2, ChevronDown, ChevronUp, Palette } from 'lucide-react';
 
 // --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
@@ -19,11 +19,25 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id';
 
+// Palette colori predefinita (10 colori con blu #174195 e giallo #feed00)
+const TEAM_COLORS = [
+  { name: 'Blu', hex: '#174195', text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  { name: 'Giallo', hex: '#feed00', text: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+  { name: 'Rosso', hex: '#ef4444', text: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+  { name: 'Verde', hex: '#22c55e', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  { name: 'Viola', hex: '#a855f7', text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+  { name: 'Arancione', hex: '#f97316', text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+  { name: 'Rosa', hex: '#ec4899', text: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/20' },
+  { name: 'Celeste', hex: '#0ea5e9', text: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
+  { name: 'Grigio', hex: '#64748b', text: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20' },
+  { name: 'Bianco', hex: '#f8fafc', text: 'text-white', bg: 'bg-white/10', border: 'border-white/20' }
+];
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [nickname, setNickname] = useState(localStorage.getItem('kicker_nickname') || '');
-  const [view, setView] = useState(nickname ? 'DASHBOARD' : 'LOGIN'); // LOGIN, DASHBOARD, CREATE, EVENT
+  const [view, setView] = useState(nickname ? 'DASHBOARD' : 'LOGIN');
   
   const [events, setEvents] = useState([]);
   const [currentEventId, setCurrentEventId] = useState(null);
@@ -286,8 +300,8 @@ function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated })
     const eventRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id', 'public', 'data', 'events', newEventId);
     
     let teams = [
-      { id: 't1', name: 'Squadra Rossa', players: [], scoreOffset: 0 },
-      { id: 't2', name: 'Squadra Blu', players: [], scoreOffset: 0 }
+      { id: 't1', name: 'Squadra Rossa', color: '#ef4444', players: [], scoreOffset: 0 },
+      { id: 't2', name: 'Squadra Blu', color: '#174195', players: [], scoreOffset: 0 }
     ];
 
     if (importId) {
@@ -296,6 +310,7 @@ function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated })
         teams = matchToImport.teams.map(team => ({
           ...team,
           scoreOffset: 0,
+          color: team.color || '#ef4444',
           players: (team.players || []).map(player => ({
             ...player,
             goals: 0
@@ -424,12 +439,16 @@ function EventCard({ event, onClick }) {
       
       <div className="flex items-center justify-between bg-slate-900/60 rounded-lg p-3">
         <div className="flex flex-col items-center flex-1">
-          <span className="text-xs font-semibold text-rose-400 mb-1 truncate w-full text-center">{event.teams[0].name}</span>
+          <span className="text-xs font-semibold mb-1 truncate w-full text-center" style={{ color: event.teams[0].color || '#ef4444' }}>
+            {event.teams[0].name}
+          </span>
           <span className="text-2xl font-black text-white">{getTeamScore(event.teams[0])}</span>
         </div>
         <div className="text-slate-600 font-bold px-4">-</div>
         <div className="flex flex-col items-center flex-1">
-          <span className="text-xs font-semibold text-blue-400 mb-1 truncate w-full text-center">{event.teams[1].name}</span>
+          <span className="text-xs font-semibold mb-1 truncate w-full text-center" style={{ color: event.teams[1].color || '#174195' }}>
+            {event.teams[1].name}
+          </span>
           <span className="text-2xl font-black text-white">{getTeamScore(event.teams[1])}</span>
         </div>
       </div>
@@ -441,7 +460,13 @@ function EventView({ event, user, goBack }) {
   const isAdmin = user && event.adminId === user.uid;
   const isLive = event.status === 'live';
   
-  const [showPlayers, setShowPlayers] = useState(true);
+  // Stati di collasso separati per singola squadra (Fix 1)
+  const [showTeam0Players, setShowTeam0Players] = useState(true);
+  const [showTeam1Players, setShowTeam1Players] = useState(true);
+
+  // Stato per il selettore colore (Fix 2)
+  const [colorPickerModal, setColorPickerModal] = useState({ isOpen: false, teamIndex: null });
+
   const [playerModal, setPlayerModal] = useState({ isOpen: false, teamIndex: null });
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerJersey, setNewPlayerJersey] = useState('');
@@ -492,11 +517,12 @@ function EventView({ event, user, goBack }) {
     updateEventData(updates);
   };
 
-  const updateTeamName = (teamIndex, newName) => {
-    if (!isAdmin || !isLive) return;
+  const updateTeamColor = (teamIndex, hexColor) => {
+    if (!isAdmin) return;
     const newTeams = [...event.teams];
-    newTeams[teamIndex].name = newName;
+    newTeams[teamIndex].color = hexColor;
     updateEventData({ teams: newTeams });
+    setColorPickerModal({ isOpen: false, teamIndex: null });
   };
 
   const openAddPlayerModal = (teamIndex) => {
@@ -572,13 +598,6 @@ function EventView({ event, user, goBack }) {
     updateEventData({ timeline: newTimeline });
   };
 
-  const updateTeamOffset = (teamIndex, newOffset) => {
-    if (!isAdmin || !isLive) return;
-    const newTeams = [...event.teams];
-    newTeams[teamIndex].scoreOffset = newOffset;
-    updateEventData({ teams: newTeams });
-  };
-
   const addReaction = (type) => {
     const newReactions = { ...event.reactions };
     newReactions[type] = (newReactions[type] || 0) + 1;
@@ -607,6 +626,9 @@ function EventView({ event, user, goBack }) {
     const encoded = encodeURIComponent(text);
     window.open(`https://wa.me/?text=${encoded}`, '_blank');
   };
+
+  const color0 = event.teams[0].color || '#ef4444';
+  const color1 = event.teams[1].color || '#174195';
 
   return (
     <div className="animate-in slide-in-from-right-4 duration-300 flex flex-col min-h-[85vh]">
@@ -667,46 +689,77 @@ function EventView({ event, user, goBack }) {
           </div>
         </div>
 
-        {/* Tabellone Punteggio e Formazioni in stile Spettatore / Partecipante */}
+        {/* Tabellone Punteggio */}
         <div className="w-full space-y-4">
           
           <div className="bg-slate-900/60 rounded-2xl p-4 border border-slate-700">
             <div className="flex justify-between items-center">
+              
+              {/* SQUADRA 0 */}
               <div className="flex flex-col items-center w-2/5">
-                 <span className="text-rose-400 font-semibold mb-1 text-xs md:text-sm truncate max-w-full">{event.teams[0].name}</span>
+                 <button 
+                  onClick={() => isAdmin && setColorPickerModal({ isOpen: true, teamIndex: 0 })}
+                  disabled={!isAdmin}
+                  className={`font-semibold mb-1 text-xs md:text-sm truncate max-w-full flex items-center gap-1.5 group/col transition-all ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  title={isAdmin ? "Clicca per cambiare colore" : ""}
+                 >
+                   <span className="w-3 h-3 rounded-full inline-block shadow-sm shrink-0" style={{ backgroundColor: color0 }}></span>
+                   <span style={{ color: color0 }}>{event.teams[0].name}</span>
+                   {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400" />}
+                 </button>
                  <div className="text-4xl md:text-6xl font-black text-white">{getTeamScore(event.teams[0])}</div>
               </div>
+
               <div className="text-xl font-bold text-slate-500">VS</div>
+
+              {/* SQUADRA 1 */}
               <div className="flex flex-col items-center w-2/5">
-                 <span className="text-blue-400 font-semibold mb-1 text-xs md:text-sm truncate max-w-full">{event.teams[1].name}</span>
+                 <button 
+                  onClick={() => isAdmin && setColorPickerModal({ isOpen: true, teamIndex: 1 })}
+                  disabled={!isAdmin}
+                  className={`font-semibold mb-1 text-xs md:text-sm truncate max-w-full flex items-center gap-1.5 group/col transition-all ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  title={isAdmin ? "Clicca per cambiare colore" : ""}
+                 >
+                   <span className="w-3 h-3 rounded-full inline-block shadow-sm shrink-0" style={{ backgroundColor: color1 }}></span>
+                   <span style={{ color: color1 }}>{event.teams[1].name}</span>
+                   {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400" />}
+                 </button>
                  <div className="text-4xl md:text-6xl font-black text-white">{getTeamScore(event.teams[1])}</div>
               </div>
+
             </div>
           </div>
 
-          <button
-            onClick={() => setShowPlayers(!showPlayers)}
-            className="w-full py-2.5 bg-slate-900/40 hover:bg-slate-900 border border-slate-700 rounded-xl text-sm font-semibold text-slate-300 transition-colors flex justify-center items-center gap-2"
-          >
-            {showPlayers ? 'Nascondi Formazioni ↑' : 'Mostra Formazioni ↓'}
-          </button>
-
-          {showPlayers && (
-            <div className="space-y-4 transition-all">
-              
-              {/* Blocco Squadra Rossa */}
-              <div className="bg-slate-900/40 rounded-xl border border-rose-500/20 overflow-hidden shadow-md">
-                <div className="bg-rose-500/10 px-4 py-2 text-rose-400 font-bold text-xs tracking-wider flex justify-between items-center">
-                  <span>{event.teams[0].name.toUpperCase()}</span>
+          {/* LISTA FORMAZIONI CON TOGGLE SEPARATI (Fix 1) */}
+          <div className="space-y-4 transition-all">
+            
+            {/* Blocco Squadra 0 */}
+            <div className="bg-slate-900/40 rounded-xl border overflow-hidden shadow-md" style={{ borderColor: `${color0}33` }}>
+              <div 
+                onClick={() => setShowTeam0Players(!showTeam0Players)}
+                className="px-4 py-2.5 font-bold text-xs tracking-wider flex justify-between items-center cursor-pointer transition-colors hover:bg-white/5"
+                style={{ backgroundColor: `${color0}15`, color: color0 }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color0 }}></span>
+                  <span>{event.teams[0].name.toUpperCase()} ({event.teams[0].players?.length || 0})</span>
+                </div>
+                <div className="flex items-center gap-2">
                   {isAdmin && isLive && (
                     <button 
-                      onClick={() => openAddPlayerModal(0)} 
-                      className="text-xs bg-rose-500/20 hover:bg-rose-500/30 px-2 py-0.5 rounded text-rose-300 flex items-center gap-1"
+                      onClick={(e) => { e.stopPropagation(); openAddPlayerModal(0); }} 
+                      className="text-xs bg-black/30 hover:bg-black/50 px-2 py-1 rounded text-white flex items-center gap-1"
                     >
                       <Plus className="w-3 h-3" /> Aggiungi
                     </button>
                   )}
+                  <span className="text-slate-400 text-xs flex items-center gap-1">
+                    {showTeam0Players ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </span>
                 </div>
+              </div>
+
+              {showTeam0Players && (
                 <div className="divide-y divide-slate-700/50 px-4">
                   {(!event.teams[0].players || event.teams[0].players.length === 0) ? (
                     <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
@@ -719,16 +772,17 @@ function EventView({ event, user, goBack }) {
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
-                          {isAdmin && isLive && (
+                          {isAdmin && isLive ? (
                             <div className="flex items-center gap-1 mr-2 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
                               <button 
                                 onClick={() => updatePlayerGoal(0, player.id, -1)}
                                 className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
                               >-</button>
-                              <span className="w-6 text-center text-sm font-bold text-rose-400">{player.goals}</span>
+                              <span className="w-6 text-center text-sm font-bold" style={{ color: color0 }}>{player.goals}</span>
                               <button 
                                 onClick={() => updatePlayerGoal(0, player.id, 1)}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-sm font-bold"
+                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold"
+                                style={{ backgroundColor: `${color0}50` }}
                               >+</button>
                               <button 
                                 onClick={() => removePlayer(0, player.id)}
@@ -738,30 +792,44 @@ function EventView({ event, user, goBack }) {
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                          )}
-                          {!isAdmin && (
-                            <div className="font-bold text-lg text-rose-400">{player.goals}</div>
+                          ) : (
+                            <div className="font-bold text-lg" style={{ color: color0 }}>{player.goals}</div>
                           )}
                         </div>
                       </div>
                     ))
                   )}
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Blocco Squadra Blu */}
-              <div className="bg-slate-900/40 rounded-xl border border-blue-500/20 overflow-hidden shadow-md">
-                <div className="bg-blue-500/10 px-4 py-2 text-blue-400 font-bold text-xs tracking-wider flex justify-between items-center">
-                  <span>{event.teams[1].name.toUpperCase()}</span>
+            {/* Blocco Squadra 1 */}
+            <div className="bg-slate-900/40 rounded-xl border overflow-hidden shadow-md" style={{ borderColor: `${color1}33` }}>
+              <div 
+                onClick={() => setShowTeam1Players(!showTeam1Players)}
+                className="px-4 py-2.5 font-bold text-xs tracking-wider flex justify-between items-center cursor-pointer transition-colors hover:bg-white/5"
+                style={{ backgroundColor: `${color1}15`, color: color1 }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color1 }}></span>
+                  <span>{event.teams[1].name.toUpperCase()} ({event.teams[1].players?.length || 0})</span>
+                </div>
+                <div className="flex items-center gap-2">
                   {isAdmin && isLive && (
                     <button 
-                      onClick={() => openAddPlayerModal(1)} 
-                      className="text-xs bg-blue-500/20 hover:bg-blue-500/30 px-2 py-0.5 rounded text-blue-300 flex items-center gap-1"
+                      onClick={(e) => { e.stopPropagation(); openAddPlayerModal(1); }} 
+                      className="text-xs bg-black/30 hover:bg-black/50 px-2 py-1 rounded text-white flex items-center gap-1"
                     >
                       <Plus className="w-3 h-3" /> Aggiungi
                     </button>
                   )}
+                  <span className="text-slate-400 text-xs flex items-center gap-1">
+                    {showTeam1Players ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </span>
                 </div>
+              </div>
+
+              {showTeam1Players && (
                 <div className="divide-y divide-slate-700/50 px-4">
                   {(!event.teams[1].players || event.teams[1].players.length === 0) ? (
                     <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
@@ -774,16 +842,17 @@ function EventView({ event, user, goBack }) {
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
-                          {isAdmin && isLive && (
+                          {isAdmin && isLive ? (
                             <div className="flex items-center gap-1 mr-2 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
                               <button 
                                 onClick={() => updatePlayerGoal(1, player.id, -1)}
                                 className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
                               >-</button>
-                              <span className="w-6 text-center text-sm font-bold text-blue-400">{player.goals}</span>
+                              <span className="w-6 text-center text-sm font-bold" style={{ color: color1 }}>{player.goals}</span>
                               <button 
                                 onClick={() => updatePlayerGoal(1, player.id, 1)}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 text-sm font-bold"
+                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold"
+                                style={{ backgroundColor: `${color1}50` }}
                               >+</button>
                               <button 
                                 onClick={() => removePlayer(1, player.id)}
@@ -793,19 +862,18 @@ function EventView({ event, user, goBack }) {
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                          )}
-                          {!isAdmin && (
-                            <div className="font-bold text-lg text-blue-400">{player.goals}</div>
+                          ) : (
+                            <div className="font-bold text-lg" style={{ color: color1 }}>{player.goals}</div>
                           )}
                         </div>
                       </div>
                     ))
                   )}
                 </div>
-              </div>
-
+              )}
             </div>
-          )}
+
+          </div>
         </div>
 
       </div>
@@ -822,7 +890,7 @@ function EventView({ event, user, goBack }) {
                   {log.type === 'start' && <span>🎬 Inizia lo spettacolo</span>}
                   {log.type === 'end' && <span>🏁 Finisce qui la partita col risultato di <span className="font-bold text-white">{log.scoreString}</span></span>}
                   {(!log.type || log.type === 'goal') && (
-                    <span><span className="font-bold text-white">{log.playerName}</span> ha segnato per <span className={log.teamName === event.teams[0].name ? 'text-rose-400' : 'text-blue-400'}>{log.teamName}</span> ⚽</span>
+                    <span><span className="font-bold text-white">{log.playerName}</span> ha segnato per <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽</span>
                   )}
                   {log.type === 'undo' && (
                     <span>❌ A <span className="font-bold text-white">{log.playerName}</span> è stato annullato il goal</span>
@@ -881,6 +949,7 @@ function EventView({ event, user, goBack }) {
         </div>
       </div>
 
+      {/* Modal Aggiungi Giocatore */}
       {playerModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -920,6 +989,44 @@ function EventView({ event, user, goBack }) {
                 Conferma
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Scelta Colore Squadra (Fix 2) */}
+      {colorPickerModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-white">Scegli Colore Squadra</h3>
+              <button onClick={() => setColorPickerModal({ isOpen: false, teamIndex: null })} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">Seleziona un colore dalla palette per la squadra.</p>
+            
+            <div className="grid grid-cols-5 gap-3 mb-4">
+              {TEAM_COLORS.map((col) => (
+                <button
+                  key={col.hex}
+                  onClick={() => updateTeamColor(colorPickerModal.teamIndex, col.hex)}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center transition-transform hover:scale-110 shadow-md border border-slate-600 relative group"
+                  style={{ backgroundColor: col.hex }}
+                  title={col.name}
+                >
+                  {event.teams[colorPickerModal.teamIndex].color === col.hex && (
+                    <Check className="w-5 h-5 text-black drop-shadow-md" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <button 
+              onClick={() => setColorPickerModal({ isOpen: false, teamIndex: null })}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl py-2 transition-colors"
+            >
+              Annulla
+            </button>
           </div>
         </div>
       )}
