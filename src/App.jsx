@@ -41,7 +41,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Ascolta la lista eventi solo se ci troviamo nella Dashboard o schermata di selezione
   useEffect(() => {
     if (!user) return;
     const unsubscribe = subscribeToEvents(

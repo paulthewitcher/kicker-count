@@ -1,4 +1,4 @@
-# KickerLive (Versione Ottimizzata Real-Time)
+# KickerLive (Versione Ottimizzata Real-Time con Effetti Avanzati)
 
 App web per il monitoraggio e la gestione in tempo reale di partite di biliardino.
 

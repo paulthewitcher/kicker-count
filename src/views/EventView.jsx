@@ -9,11 +9,9 @@ import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
 
 const EventView = memo(function EventView({ event: initialEvent, user, goBack }) {
-  // Mantieni uno stato locale sincronizzato istantaneamente col singolo documento Firestore
   const [event, setEvent] = useState(initialEvent);
 
   useEffect(() => {
-    // Ascolta unicamente questo documento per aggiornamenti ultra-reattivi (evita lag di tutta la lista)
     const unsubscribe = subscribeToSingleEvent(initialEvent.id, (updatedEvent) => {
       setEvent(updatedEvent);
     }, (err) => console.error("Error syncing single event:", err));
@@ -177,7 +175,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
             timestamp: now.getTime()
           }, ...newTimeline];
 
-          // FEATURE NUOVA: Lancio automatico dell'emoji pallone ⚽️ su Firestore per tutti gli spettatori!
+          // Incrementa la reazione pallone in Firestore (sincronizzato su tutti i dispositivi)
           addEmojiReaction(event.id, '⚽');
         } else if (delta < 0) {
           newTimeline = [{

@@ -11,4 +11,4 @@ export const TEAM_COLORS = [
   { name: 'Bianco', hex: '#f8fafc' }
 ];
 
-export const EMOJI_LIST = ['👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '😈', '🫣', '😱', '😡'];
+export const EMOJI_LIST = ['⚽', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '😈', '🫣', '😱'];

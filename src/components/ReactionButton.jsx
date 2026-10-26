@@ -12,26 +12,26 @@ const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 
 
       const col = index % 4;
       let baseDrift = 0;
-      if (col === 0) baseDrift = 110;
-      else if (col === 1) baseDrift = 35;
-      else if (col === 2) baseDrift = -35;
-      else if (col === 3) baseDrift = -110;
+      if (col === 0) baseDrift = 160;
+      else if (col === 1) baseDrift = 55;
+      else if (col === 2) baseDrift = -55;
+      else if (col === 3) baseDrift = -160;
 
       for (let j = 0; j < bursts; j++) {
         setTimeout(() => {
           const id = Date.now() + Math.random();
-          // Aumentato significativamente il numero di duplicati (25 particelle ad alta fluidità)
+          // 25 particelle ad ampiezza espansa a sinistra e destra e durata prolungata
           const newParticles = Array.from({ length: 25 }).map((_, i) => {
-            const startX = (Math.random() - 0.5) * 50;
-            const endX = baseDrift + (Math.random() - 0.5) * 80;
+            const startX = (Math.random() - 0.5) * 160; // Spostamento iniziale più ampio
+            const endX = baseDrift + (Math.random() - 0.5) * 260; // Ampiezza finale estesa a tutto lo schermo
             return {
               id: `${id}-${i}`,
               startX,
               endX,
-              scale: 0.8 + Math.random() * 1.0,
-              duration: 2.2 + Math.random() * 1.2,
-              delay: Math.random() * 0.4, // Stagger per fluidità
-              rotation: (Math.random() - 0.5) * 70
+              scale: 0.85 + Math.random() * 1.1,
+              duration: 4.2 + Math.random() * 1.6, // Durata estesa di 2+ secondi
+              delay: Math.random() * 0.5,
+              rotation: (Math.random() - 0.5) * 80
             };
           });
 
@@ -39,7 +39,7 @@ const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 
 
           setTimeout(() => {
             setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
-          }, 4000);
+          }, 6500);
         }, j * 120);
       }
     }
@@ -95,17 +95,17 @@ const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 
             opacity: 1;
             transform: translate(var(--start-x, 0px), 0px) scale(0.5) rotate(0deg);
           }
-          20% {
+          15% {
             opacity: 1;
-            transform: translate(calc(var(--start-x, 0px) * 0.7 + var(--end-x, 0px) * 0.3), -140px) scale(1.1) rotate(15deg);
+            transform: translate(calc(var(--start-x, 0px) * 0.7 + var(--end-x, 0px) * 0.3), -200px) scale(1.1) rotate(20deg);
           }
-          65% {
+          60% {
             opacity: 0.95;
-            transform: translate(calc(var(--start-x, 0px) * 0.3 + var(--end-x, 0px) * 0.7), -420px) scale(1.35) rotate(-15deg);
+            transform: translate(calc(var(--start-x, 0px) * 0.3 + var(--end-x, 0px) * 0.7), -650px) scale(1.4) rotate(-20deg);
           }
           100% {
             opacity: 0;
-            transform: translate(var(--end-x, 0px), -700px) scale(0.9) rotate(25deg);
+            transform: translate(var(--end-x, 0px), -1050px) scale(0.8) rotate(30deg);
           }
         }
         .animate-instagram-float {
