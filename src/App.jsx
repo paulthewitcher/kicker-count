@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2, ChevronDown, ChevronUp, Palette, UserMinus } from 'lucide-react';
 
@@ -19,19 +19,21 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id';
 
-// Palette colori predefinita (10 colori con blu #174195 e giallo #feed00)
+// Palette colori predefinita
 const TEAM_COLORS = [
-  { name: 'Blu', hex: '#174195', text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  { name: 'Giallo', hex: '#feed00', text: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-  { name: 'Rosso', hex: '#ef4444', text: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-  { name: 'Verde', hex: '#22c55e', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-  { name: 'Viola', hex: '#a855f7', text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-  { name: 'Arancione', hex: '#f97316', text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  { name: 'Rosa', hex: '#ec4899', text: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/20' },
-  { name: 'Celeste', hex: '#0ea5e9', text: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
-  { name: 'Grigio', hex: '#64748b', text: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20' },
-  { name: 'Bianco', hex: '#f8fafc', text: 'text-white', bg: 'bg-white/10', border: 'border-white/20' }
+  { name: 'Blu', hex: '#174195' },
+  { name: 'Giallo', hex: '#feed00' },
+  { name: 'Rosso', hex: '#ef4444' },
+  { name: 'Verde', hex: '#22c55e' },
+  { name: 'Viola', hex: '#a855f7' },
+  { name: 'Arancione', hex: '#f97316' },
+  { name: 'Rosa', hex: '#ec4899' },
+  { name: 'Celeste', hex: '#0ea5e9' },
+  { name: 'Grigio', hex: '#64748b' },
+  { name: 'Bianco', hex: '#f8fafc' }
 ];
+
+const EMOJI_LIST = ['👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '😈', '🫣', '😱', '😡'];
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -41,6 +43,7 @@ export default function App() {
   
   const [events, setEvents] = useState([]);
   const [currentEventId, setCurrentEventId] = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -99,6 +102,14 @@ export default function App() {
     }
   };
 
+  const handleLogout = async () => {
+    localStorage.removeItem('kicker_nickname');
+    setNickname('');
+    setView('LOGIN');
+    setShowLogoutConfirm(false);
+    await signOut(auth); // Effettua il vero logout rigenerando l'ID utente anonimo
+  };
+
   const currentEvent = events.find(e => e.id === currentEventId);
 
   if (authLoading) {
@@ -119,10 +130,14 @@ export default function App() {
             KickerLive
           </div>
           {nickname && view !== 'LOGIN' && (
-            <div className="text-sm text-slate-400 bg-slate-700/50 px-3 py-1 rounded-full flex items-center gap-2">
-              <Users className="w-4 h-4" />
+            <button 
+              onClick={() => setShowLogoutConfirm(true)}
+              className="text-sm text-slate-400 bg-slate-700/50 hover:bg-slate-700 transition-colors px-3 py-1 rounded-full flex items-center gap-2 cursor-pointer group"
+              title="Disconnetti"
+            >
+              <Users className="w-4 h-4 group-hover:text-red-400 transition-colors" />
               {nickname}
-            </div>
+            </button>
           )}
         </div>
       </header>
@@ -181,6 +196,33 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Modal di Conferma Logout */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center">
+            <h3 className="text-xl font-bold text-white mb-2">Disconnetti</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              Attenzione: se effettui il logout <span className="font-bold text-red-400">non sarai più in grado di gestire</span> gli eventi creati in passato come admin, ma solo quelli nuovi al prossimo accesso.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => setShowLogoutConfirm(false)}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl py-3 transition-colors"
+              >
+                Resta connesso
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="w-full bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 font-bold rounded-xl py-3 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -326,7 +368,7 @@ function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated })
       status: 'live',
       createdAt: Date.now(),
       teams: teams,
-      reactions: { fire: 0, clap: 0, shock: 0, ball: 0 },
+      reactions: {},
       timeline: [{
         id: crypto.randomUUID(),
         type: 'start',
@@ -463,15 +505,14 @@ function EventView({ event, user, goBack }) {
   const [showTeam0Players, setShowTeam0Players] = useState(true);
   const [showTeam1Players, setShowTeam1Players] = useState(true);
 
-  // Stato modale personalizzazione squadra (Nome + Colore)
   const [teamModal, setTeamModal] = useState({ isOpen: false, teamIndex: null, name: '', color: '' });
-
   const [playerModal, setPlayerModal] = useState({ isOpen: false, teamIndex: null });
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerJersey, setNewPlayerJersey] = useState('');
-
-  // Stato per il popup di conferma rimozione giocatore
   const [deleteConfirmModal, setDeleteConfirmModal] = useState({ isOpen: false, teamIndex: null, playerId: null, playerName: '' });
+
+  // Stato per edit punteggio al volo
+  const [editingScore, setEditingScore] = useState({ teamIndex: null, tempScore: '' });
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(event.title);
@@ -483,6 +524,11 @@ function EventView({ event, user, goBack }) {
   const getTeamScore = (team) => {
     const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
     return baseScore + (team.scoreOffset || 0);
+  };
+
+  // Funzione per ordinare i giocatori
+  const getSortedPlayers = (players) => {
+    return [...(players || [])].sort((a, b) => b.goals - a.goals);
   };
 
   const updateEventData = async (newData) => {
@@ -542,6 +588,23 @@ function EventView({ event, user, goBack }) {
     
     updateEventData({ teams: newTeams });
     setTeamModal({ isOpen: false, teamIndex: null, name: '', color: '' });
+  };
+
+  // Funzioni gestione Punteggio
+  const handleScoreSave = (teamIndex) => {
+    const team = event.teams[teamIndex];
+    const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
+    const parsed = parseInt(editingScore.tempScore, 10);
+    const newTotal = isNaN(parsed) ? getTeamScore(team) : parsed;
+    updateTeamOffset(teamIndex, newTotal - baseScore);
+    setEditingScore({ teamIndex: null, tempScore: '' });
+  };
+
+  const updateTeamOffset = (teamIndex, newOffset) => {
+    if (!isAdmin || !isLive) return;
+    const newTeams = [...event.teams];
+    newTeams[teamIndex].scoreOffset = newOffset;
+    updateEventData({ teams: newTeams });
   };
 
   const openAddPlayerModal = (teamIndex) => {
@@ -645,7 +708,7 @@ function EventView({ event, user, goBack }) {
     
     event.teams.forEach((team, idx) => {
       const icon = idx === 0 ? '🔴' : '🔵';
-      const scorers = (team.players || []).filter(p => p.goals > 0);
+      const scorers = getSortedPlayers(team.players).filter(p => p.goals > 0);
       if (scorers.length > 0) {
         text += `${icon} *${team.name}*:\n`;
         scorers.forEach(p => {
@@ -739,7 +802,29 @@ function EventView({ event, user, goBack }) {
                    <span style={{ color: color0 }}>{event.teams[0].name}</span>
                    {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400" />}
                  </button>
-                 <div className="text-4xl md:text-6xl font-black text-white">{getTeamScore(event.teams[0])}</div>
+                 
+                 {isAdmin && isLive && editingScore.teamIndex === 0 ? (
+                   <input
+                     autoFocus
+                     type="number"
+                     value={editingScore.tempScore}
+                     onChange={(e) => setEditingScore({ ...editingScore, tempScore: e.target.value })}
+                     onBlur={() => handleScoreSave(0)}
+                     onKeyDown={(e) => e.key === 'Enter' && handleScoreSave(0)}
+                     className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-6xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
+                   />
+                 ) : (
+                   <div 
+                     onClick={() => isAdmin && isLive && setEditingScore({ teamIndex: 0, tempScore: getTeamScore(event.teams[0]) })}
+                     className={`text-4xl md:text-6xl font-black text-white flex items-center relative group/score ${isAdmin && isLive ? 'cursor-pointer' : ''}`}
+                     title={isAdmin && isLive ? "Modifica punteggio" : ""}
+                   >
+                     {getTeamScore(event.teams[0])}
+                     {isAdmin && isLive && (
+                        <Edit2 className="w-5 h-5 absolute -right-8 text-slate-500 opacity-0 group-hover/score:opacity-100 transition-opacity" />
+                     )}
+                   </div>
+                 )}
               </div>
 
               <div className="text-xl font-bold text-slate-500">VS</div>
@@ -756,7 +841,29 @@ function EventView({ event, user, goBack }) {
                    <span style={{ color: color1 }}>{event.teams[1].name}</span>
                    {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400" />}
                  </button>
-                 <div className="text-4xl md:text-6xl font-black text-white">{getTeamScore(event.teams[1])}</div>
+
+                 {isAdmin && isLive && editingScore.teamIndex === 1 ? (
+                   <input
+                     autoFocus
+                     type="number"
+                     value={editingScore.tempScore}
+                     onChange={(e) => setEditingScore({ ...editingScore, tempScore: e.target.value })}
+                     onBlur={() => handleScoreSave(1)}
+                     onKeyDown={(e) => e.key === 'Enter' && handleScoreSave(1)}
+                     className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-6xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
+                   />
+                 ) : (
+                   <div 
+                     onClick={() => isAdmin && isLive && setEditingScore({ teamIndex: 1, tempScore: getTeamScore(event.teams[1]) })}
+                     className={`text-4xl md:text-6xl font-black text-white flex items-center relative group/score ${isAdmin && isLive ? 'cursor-pointer' : ''}`}
+                     title={isAdmin && isLive ? "Modifica punteggio" : ""}
+                   >
+                     {getTeamScore(event.teams[1])}
+                     {isAdmin && isLive && (
+                        <Edit2 className="w-5 h-5 absolute -right-8 text-slate-500 opacity-0 group-hover/score:opacity-100 transition-opacity" />
+                     )}
+                   </div>
+                 )}
               </div>
 
             </div>
@@ -796,7 +903,7 @@ function EventView({ event, user, goBack }) {
                   {(!event.teams[0].players || event.teams[0].players.length === 0) ? (
                     <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
                   ) : (
-                    event.teams[0].players.map(player => (
+                    getSortedPlayers(event.teams[0].players).map(player => (
                       <div key={player.id} className="flex justify-between items-center py-3">
                         <div className="flex items-center gap-2">
                           {isAdmin && isLive && (
@@ -868,7 +975,7 @@ function EventView({ event, user, goBack }) {
                   {(!event.teams[1].players || event.teams[1].players.length === 0) ? (
                     <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
                   ) : (
-                    event.teams[1].players.map(player => (
+                    getSortedPlayers(event.teams[1].players).map(player => (
                       <div key={player.id} className="flex justify-between items-center py-3">
                         <div className="flex items-center gap-2">
                           {isAdmin && isLive && (
@@ -976,12 +1083,16 @@ function EventView({ event, user, goBack }) {
       )}
 
       <div className="mt-8 mb-4">
-        <h3 className="text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Reazioni Pubblico</h3>
-        <div className="flex justify-center gap-6">
-          <ReactionButton emoji="🔥" count={event.reactions?.fire} onClick={() => addReaction('fire')} />
-          <ReactionButton emoji="👏" count={event.reactions?.clap} onClick={() => addReaction('clap')} />
-          <ReactionButton emoji="😱" count={event.reactions?.shock} onClick={() => addReaction('shock')} />
-          <ReactionButton emoji="⚽" count={event.reactions?.ball} onClick={() => addReaction('ball')} />
+        <h3 className="text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Reazioni Pubblico</h3>
+        <div className="grid grid-cols-4 gap-3 md:gap-4 justify-items-center max-w-sm mx-auto">
+          {EMOJI_LIST.map((emoji) => (
+             <ReactionButton 
+                key={emoji} 
+                emoji={emoji} 
+                count={event.reactions?.[emoji] || 0} 
+                onClick={() => addReaction(emoji)} 
+             />
+          ))}
         </div>
       </div>
 
@@ -1126,24 +1237,82 @@ function EventView({ event, user, goBack }) {
 
 function ReactionButton({ emoji, count = 0, onClick }) {
   const [animate, setAnimate] = useState(false);
+  const [particles, setParticles] = useState([]);
 
   const handleClick = () => {
     setAnimate(true);
     setTimeout(() => setAnimate(false), 300);
     onClick();
+
+    const id = Date.now();
+    const newParticles = Array.from({ length: 10 }).map((_, i) => ({
+      id: `${id}-${i}`,
+      xOffset: (Math.random() - 0.5) * 120,
+      scale: 0.8 + Math.random() * 0.8,
+      duration: 1.2 + Math.random() * 0.8,
+      rotation: (Math.random() - 0.5) * 45
+    }));
+
+    setParticles(prev => [...prev, ...newParticles]);
+
+    setTimeout(() => {
+      setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
+    }, 2000);
   };
 
   return (
-    <button 
-      onClick={handleClick}
-      className={`flex flex-col items-center gap-1.5 group transition-transform ${animate ? 'scale-125' : 'hover:-translate-y-1'}`}
-    >
-      <div className="w-12 h-12 md:w-14 md:h-14 bg-slate-800 border border-slate-700 rounded-full flex items-center justify-center text-xl md:text-2xl shadow-lg group-hover:border-emerald-500 group-hover:bg-slate-700 transition-all">
-        {emoji}
+    <div className="relative flex flex-col items-center">
+      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 pointer-events-none overflow-visible z-30 w-0 h-0">
+        {particles.map(p => (
+          <span
+            key={p.id}
+            className="absolute text-2xl select-none animate-instagram-float"
+            style={{
+              left: `${p.xOffset}px`,
+              '--tw-scale-x': p.scale,
+              '--tw-scale-y': p.scale,
+              transform: `scale(${p.scale}) rotate(${p.rotation}deg)`,
+              animationDuration: `${p.duration}s`
+            }}
+          >
+            {emoji}
+          </span>
+        ))}
       </div>
-      <div className="bg-slate-900/80 px-3 py-0.5 rounded-full text-xs font-bold text-slate-400 border border-slate-800 min-w-[32px] text-center">
-        {count}
-      </div>
-    </button>
+
+      <button 
+        onClick={handleClick}
+        className={`flex flex-col items-center gap-1.5 group transition-transform ${animate ? 'scale-125' : 'hover:-translate-y-1'}`}
+      >
+        <div className="w-12 h-12 md:w-14 md:h-14 bg-slate-800 border border-slate-700 rounded-full flex items-center justify-center text-xl md:text-2xl shadow-lg group-hover:border-emerald-500 group-hover:bg-slate-700 transition-all">
+          {emoji}
+        </div>
+        {count > 0 && (
+          <div className="bg-slate-900/80 px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold text-slate-400 border border-slate-800 min-w-[28px] text-center">
+            {count}
+          </div>
+        )}
+      </button>
+
+      <style>{`
+        @keyframes instagramFloat {
+          0% {
+            opacity: 1;
+            transform: translateY(0px) scale(0.6) rotate(0deg);
+          }
+          50% {
+            opacity: 0.9;
+            transform: translateY(-120px) scale(1.2) rotate(10deg);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-240px) scale(1) rotate(-10deg);
+          }
+        }
+        .animate-instagram-float {
+          animation: instagramFloat linear forwards;
+        }
+      `}</style>
+    </div>
   );
 }
