@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Plus, History } from 'lucide-react';
 import EventCard from '../components/EventCard';
 
-export default function DashboardView({ events, goToCreate, openEvent }) {
+const DashboardView = memo(function DashboardView({ events, goToCreate, openEvent }) {
   const liveEvents = events.filter(e => e.status === 'live');
   const pastEvents = events.filter(e => e.status === 'ended');
 
@@ -60,4 +60,6 @@ export default function DashboardView({ events, goToCreate, openEvent }) {
       </div>
     </div>
   );
-}
+});
+
+export default DashboardView;

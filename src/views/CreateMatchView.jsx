@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { ArrowLeft, Play } from 'lucide-react';
 import { createEvent } from '../services/eventService';
 
-export default function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated }) {
+const CreateMatchView = memo(function CreateMatchView({ user, nickname, pastEvents, goBack, onMatchCreated }) {
   const [title, setTitle] = useState(`Partita di ${nickname}`);
   const [importId, setImportId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -77,4 +77,6 @@ export default function CreateMatchView({ user, nickname, pastEvents, goBack, on
       </div>
     </div>
   );
-}
+});
+
+export default CreateMatchView;

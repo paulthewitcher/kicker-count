@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Trophy, ArrowLeft } from 'lucide-react';
 
-export default function LoginView({ nickname, setNickname, handleLogin }) {
+const LoginView = memo(function LoginView({ nickname, setNickname, handleLogin }) {
   return (
     <div className="mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700">
@@ -35,4 +35,6 @@ export default function LoginView({ nickname, setNickname, handleLogin }) {
       </div>
     </div>
   );
-}
+});
+
+export default LoginView;

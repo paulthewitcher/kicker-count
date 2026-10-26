@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { X, Check } from 'lucide-react';
 import { TEAM_COLORS } from '../../utils/constants';
 
-export default function EditTeamModal({ isOpen, onClose, teamModal, setTeamModal, onSave }) {
+const EditTeamModal = memo(function EditTeamModal({ isOpen, onClose, teamModal, setTeamModal, onSave }) {
   if (!isOpen) return null;
 
   return (
@@ -68,4 +68,6 @@ export default function EditTeamModal({ isOpen, onClose, teamModal, setTeamModal
       </div>
     </div>
   );
-}
+});
+
+export default EditTeamModal;

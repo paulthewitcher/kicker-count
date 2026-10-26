@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { memo } from 'react';
 
-export default function LogoutModal({ isOpen, onClose, onConfirm }) {
+const LogoutModal = memo(function LogoutModal({ isOpen, onClose, onConfirm }) {
   if (!isOpen) return null;
 
   return (
@@ -27,4 +27,6 @@ export default function LogoutModal({ isOpen, onClose, onConfirm }) {
       </div>
     </div>
   );
-}
+});
+
+export default LogoutModal;

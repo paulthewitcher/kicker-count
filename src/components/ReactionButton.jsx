@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 
-export default function ReactionButton({ emoji, index = 0, count = 0, onClick }) {
+const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 0, onClick }) {
   const [animate, setAnimate] = useState(false);
   const [particles, setParticles] = useState([]);
   const prevCountRef = useRef(count);
@@ -20,17 +20,18 @@ export default function ReactionButton({ emoji, index = 0, count = 0, onClick })
       for (let j = 0; j < bursts; j++) {
         setTimeout(() => {
           const id = Date.now() + Math.random();
-          // Aumentato il numero dei duplicati di 5 (da 8 a 13 particelle)
-          const newParticles = Array.from({ length: 13 }).map((_, i) => {
-            const startX = (Math.random() - 0.5) * 40;
-            const endX = baseDrift + (Math.random() - 0.5) * 60;
+          // Aumentato significativamente il numero di duplicati (25 particelle ad alta fluidità)
+          const newParticles = Array.from({ length: 25 }).map((_, i) => {
+            const startX = (Math.random() - 0.5) * 50;
+            const endX = baseDrift + (Math.random() - 0.5) * 80;
             return {
               id: `${id}-${i}`,
               startX,
               endX,
-              scale: 0.9 + Math.random() * 0.9,
-              duration: 2.5 + Math.random() * 1.0,
-              rotation: (Math.random() - 0.5) * 60
+              scale: 0.8 + Math.random() * 1.0,
+              duration: 2.2 + Math.random() * 1.2,
+              delay: Math.random() * 0.4, // Stagger per fluidità
+              rotation: (Math.random() - 0.5) * 70
             };
           });
 
@@ -38,8 +39,8 @@ export default function ReactionButton({ emoji, index = 0, count = 0, onClick })
 
           setTimeout(() => {
             setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
-          }, 3800);
-        }, j * 150);
+          }, 4000);
+        }, j * 120);
       }
     }
     
@@ -48,7 +49,7 @@ export default function ReactionButton({ emoji, index = 0, count = 0, onClick })
 
   const handleClick = () => {
     setAnimate(true);
-    setTimeout(() => setAnimate(false), 300);
+    setTimeout(() => setAnimate(false), 250);
     onClick();
   };
 
@@ -58,14 +59,15 @@ export default function ReactionButton({ emoji, index = 0, count = 0, onClick })
         {particles.map(p => (
           <span
             key={p.id}
-            className="absolute text-3xl select-none animate-instagram-float drop-shadow-lg"
+            className="absolute text-3xl select-none animate-instagram-float drop-shadow-md"
             style={{
               '--start-x': `${p.startX}px`,
               '--end-x': `${p.endX}px`,
               '--tw-scale-x': p.scale,
               '--tw-scale-y': p.scale,
               transform: `scale(${p.scale}) rotate(${p.rotation}deg)`,
-              animationDuration: `${p.duration}s`
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`
             }}
           >
             {emoji}
@@ -75,7 +77,7 @@ export default function ReactionButton({ emoji, index = 0, count = 0, onClick })
 
       <button 
         onClick={handleClick}
-        className={`flex flex-col items-center gap-1.5 group transition-transform ${animate ? 'scale-125' : 'hover:-translate-y-1'}`}
+        className={`flex flex-col items-center gap-1.5 group transition-transform active:scale-125 ${animate ? 'scale-125' : 'hover:-translate-y-1'}`}
       >
         <div className="w-12 h-12 md:w-14 md:h-14 bg-slate-800 border border-slate-700 rounded-full flex items-center justify-center text-xl md:text-2xl shadow-lg group-hover:border-emerald-500 group-hover:bg-slate-700 transition-all">
           {emoji}
@@ -91,25 +93,27 @@ export default function ReactionButton({ emoji, index = 0, count = 0, onClick })
         @keyframes instagramFloat {
           0% {
             opacity: 1;
-            transform: translate(var(--start-x, 0px), 0px) scale(0.6) rotate(0deg);
+            transform: translate(var(--start-x, 0px), 0px) scale(0.5) rotate(0deg);
           }
-          25% {
+          20% {
             opacity: 1;
-            transform: translate(calc(var(--start-x, 0px) * 0.7 + var(--end-x, 0px) * 0.3), -150px) scale(1.1) rotate(15deg);
+            transform: translate(calc(var(--start-x, 0px) * 0.7 + var(--end-x, 0px) * 0.3), -140px) scale(1.1) rotate(15deg);
           }
           65% {
             opacity: 0.95;
-            transform: translate(calc(var(--start-x, 0px) * 0.3 + var(--end-x, 0px) * 0.7), -400px) scale(1.3) rotate(-15deg);
+            transform: translate(calc(var(--start-x, 0px) * 0.3 + var(--end-x, 0px) * 0.7), -420px) scale(1.35) rotate(-15deg);
           }
           100% {
             opacity: 0;
-            transform: translate(var(--end-x, 0px), -680px) scale(1) rotate(20deg);
+            transform: translate(var(--end-x, 0px), -700px) scale(0.9) rotate(25deg);
           }
         }
         .animate-instagram-float {
-          animation: instagramFloat ease-out forwards;
+          animation: instagramFloat cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
         }
       `}</style>
     </div>
   );
-}
+});
+
+export default ReactionButton;

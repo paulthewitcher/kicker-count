@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Activity, Users } from 'lucide-react';
 
-export default function Header({ nickname, view, setView, onOpenLogoutModal }) {
+const Header = memo(function Header({ nickname, view, setView, onOpenLogoutModal }) {
   return (
     <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-20 shadow-md">
       <div className="max-w-xl mx-auto px-4 h-16 flex items-center justify-between">
         <div 
-          className="flex items-center gap-2 text-emerald-400 font-bold text-xl tracking-tight cursor-pointer" 
+          className="flex items-center gap-2 text-emerald-400 font-bold text-xl tracking-tight cursor-pointer active:scale-95 transition-transform" 
           onClick={() => setView('DASHBOARD')}
         >
           <Activity className="w-6 h-6" />
@@ -25,4 +25,6 @@ export default function Header({ nickname, view, setView, onOpenLogoutModal }) {
       </div>
     </header>
   );
-}
+});
+
+export default Header;

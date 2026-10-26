@@ -19,6 +19,17 @@ export const subscribeToEvents = (onEventsUpdate, onError) => {
   }, onError);
 };
 
+// Sottoscrizione dedicata ad un singolo evento per evitare re-render massivi di tutta l'app
+export const subscribeToSingleEvent = (eventId, onEventUpdate, onError) => {
+  if (!eventId) return () => {};
+  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  return onSnapshot(eventRef, (docSnap) => {
+    if (docSnap.exists()) {
+      onEventUpdate({ id: docSnap.id, ...docSnap.data() });
+    }
+  }, onError);
+};
+
 export const createEvent = async ({ user, nickname, title, importId, pastEvents }) => {
   const newEventId = crypto.randomUUID();
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', newEventId);

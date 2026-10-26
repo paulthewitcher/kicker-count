@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { memo } from 'react';
 
-export default function DeletePlayerModal({ isOpen, onClose, playerName, onConfirm }) {
+const DeletePlayerModal = memo(function DeletePlayerModal({ isOpen, onClose, playerName, onConfirm }) {
   if (!isOpen) return null;
 
   return (
@@ -27,4 +27,6 @@ export default function DeletePlayerModal({ isOpen, onClose, playerName, onConfi
       </div>
     </div>
   );
-}
+});
+
+export default DeletePlayerModal;

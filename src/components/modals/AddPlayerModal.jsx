@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { X } from 'lucide-react';
 
-export default function AddPlayerModal({ isOpen, onClose, onConfirm, newPlayerName, setNewPlayerName, newPlayerJersey, setNewPlayerJersey }) {
+const AddPlayerModal = memo(function AddPlayerModal({ isOpen, onClose, onConfirm, newPlayerName, setNewPlayerName, newPlayerJersey, setNewPlayerJersey }) {
   if (!isOpen) return null;
 
   return (
@@ -46,4 +46,6 @@ export default function AddPlayerModal({ isOpen, onClose, onConfirm, newPlayerNa
       </div>
     </div>
   );
-}
+});
+
+export default AddPlayerModal;

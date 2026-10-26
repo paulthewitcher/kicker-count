@@ -1,14 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { ArrowLeft, Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus, Clock, Trash2, Check, RotateCcw } from 'lucide-react';
 import { EMOJI_LIST } from '../utils/constants';
 import { getTeamScore, getSortedPlayers } from '../utils/helpers';
-import { updateEventData, addEmojiReaction } from '../services/eventService';
+import { updateEventData, addEmojiReaction, subscribeToSingleEvent } from '../services/eventService';
 import ReactionButton from '../components/ReactionButton';
 import AddPlayerModal from '../components/modals/AddPlayerModal';
 import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
 
-export default function EventView({ event, user, goBack }) {
+const EventView = memo(function EventView({ event: initialEvent, user, goBack }) {
+  // Mantieni uno stato locale sincronizzato istantaneamente col singolo documento Firestore
+  const [event, setEvent] = useState(initialEvent);
+
+  useEffect(() => {
+    // Ascolta unicamente questo documento per aggiornamenti ultra-reattivi (evita lag di tutta la lista)
+    const unsubscribe = subscribeToSingleEvent(initialEvent.id, (updatedEvent) => {
+      setEvent(updatedEvent);
+    }, (err) => console.error("Error syncing single event:", err));
+
+    return () => unsubscribe();
+  }, [initialEvent.id]);
+
   const isAdmin = user && event.adminId === user.uid;
   const isLive = event.status === 'live';
   
@@ -164,6 +176,9 @@ export default function EventView({ event, user, goBack }) {
             time: timeString,
             timestamp: now.getTime()
           }, ...newTimeline];
+
+          // FEATURE NUOVA: Lancio automatico dell'emoji pallone ⚽️ su Firestore per tutti gli spettatori!
+          addEmojiReaction(event.id, '⚽');
         } else if (delta < 0) {
           newTimeline = [{
             id: crypto.randomUUID(),
@@ -415,12 +430,12 @@ export default function EventView({ event, user, goBack }) {
                             <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
                               <button 
                                 onClick={() => updatePlayerGoal(0, player.id, -1)}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
+                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold active:scale-95 transition-transform"
                               >-</button>
                               <span className="w-6 text-center text-sm font-bold" style={{ color: color0 }}>{player.goals}</span>
                               <button 
                                 onClick={() => updatePlayerGoal(0, player.id, 1)}
-                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold"
+                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold active:scale-95 transition-transform"
                                 style={{ backgroundColor: `${color0}50` }}
                               >+</button>
                             </div>
@@ -487,12 +502,12 @@ export default function EventView({ event, user, goBack }) {
                             <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
                               <button 
                                 onClick={() => updatePlayerGoal(1, player.id, -1)}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold"
+                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold active:scale-95 transition-transform"
                               >-</button>
                               <span className="w-6 text-center text-sm font-bold" style={{ color: color1 }}>{player.goals}</span>
                               <button 
                                 onClick={() => updatePlayerGoal(1, player.id, 1)}
-                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold"
+                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold active:scale-95 transition-transform"
                                 style={{ backgroundColor: `${color1}50` }}
                               >+</button>
                             </div>
@@ -614,4 +629,6 @@ export default function EventView({ event, user, goBack }) {
 
     </div>
   );
-}
+});
+
+export default EventView;

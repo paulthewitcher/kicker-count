@@ -1,13 +1,13 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { getTeamScore, formatTimestamp } from '../utils/helpers';
 
-export default function EventCard({ event, onClick }) {
+const EventCard = memo(function EventCard({ event, onClick }) {
   const isLive = event.status === 'live';
 
   return (
     <div 
       onClick={onClick}
-      className={`bg-slate-800 rounded-xl p-4 border cursor-pointer hover:border-slate-500 transition-all ${isLive ? 'border-slate-600 shadow-lg' : 'border-slate-800/50'}`}
+      className={`bg-slate-800 rounded-xl p-4 border cursor-pointer hover:border-slate-500 transition-all active:scale-[0.99] ${isLive ? 'border-slate-600 shadow-lg' : 'border-slate-800/50'}`}
     >
       <div className="flex justify-between items-start mb-4">
         <div>
@@ -41,4 +41,6 @@ export default function EventCard({ event, onClick }) {
       </div>
     </div>
   );
-}
+});
+
+export default EventCard;
