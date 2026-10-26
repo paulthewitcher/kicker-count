@@ -1,4 +1,4 @@
-# KickerLive (Opera Goal Commentary Feature)
+# KickerLive (Timeline Formatting & Fixes)
 
 App web per il monitoraggio e la gestione in tempo reale di partite di biliardino.
 

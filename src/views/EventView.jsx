@@ -168,13 +168,12 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         if (delta > 0) {
           const isOperaTeam = newTeams[teamIndex].name.toLowerCase().includes('opera');
           const currentTeamScore = getTeamScore(newTeams[teamIndex]);
-          let customMessage = null;
+          let customTemplate = null;
 
           // Se la squadra è OPERA e si trova dal 4° goal in poi
           if (isOperaTeam && currentTeamScore >= 4) {
             const randomIndex = Math.floor(Math.random() * OPERA_GOAL_TEMPLATES.length);
-            const template = OPERA_GOAL_TEMPLATES[randomIndex];
-            customMessage = template.replace(/<giocatore>/g, player.name);
+            customTemplate = OPERA_GOAL_TEMPLATES[randomIndex];
           }
 
           newTimeline = [{
@@ -184,7 +183,8 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
             teamName: newTeams[teamIndex].name,
             time: timeString,
             timestamp: now.getTime(),
-            customMessage: customMessage
+            customTemplate: customTemplate,
+            customMessage: customTemplate ? customTemplate.replace(/<giocatore>/g, player.name) : null
           }, ...newTimeline];
 
           addEmojiReaction(event.id, '⚽');
@@ -544,36 +544,73 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
             <Clock className="w-4 h-4" /> Cronologia Eventi
           </h3>
           <div className="space-y-2">
-            {event.timeline.map((log) => (
-              <div key={log.id} className="flex justify-between items-center text-sm border-b border-slate-700/50 pb-2 group">
-                <span className="text-slate-300 flex-1 pr-2">
-                  {log.type === 'start' && <span>🎬 Inizia lo spettacolo</span>}
-                  {log.type === 'end' && <span>🏁 Finisce qui la partita col risultato di <span className="font-bold text-white">{log.scoreString}</span></span>}
-                  {(!log.type || log.type === 'goal') && (
-                    log.customMessage ? (
-                      <span><span className="font-medium text-emerald-300">{log.customMessage}</span> ⚽</span>
-                    ) : (
-                      <span><span className="font-bold text-white">{log.playerName}</span> ha segnato per <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽</span>
-                    )
-                  )}
-                  {log.type === 'undo' && (
-                    <span>❌ A <span className="font-bold text-white">{log.playerName}</span> è stato annullato il goal</span>
-                  )}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="text-slate-500 font-mono text-xs">{log.time}</span>
-                  {isAdmin && (
-                    <button 
-                      onClick={() => deleteLog(log.id)}
-                      className="text-slate-600 hover:text-red-400 transition-colors md:opacity-0 md:group-hover:opacity-100"
-                      title="Elimina log"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+            {event.timeline.map((log) => {
+              const renderGoalLog = () => {
+                const template = log.customTemplate;
+                if (template) {
+                  const parts = template.split('<giocatore>');
+                  return (
+                    <span>
+                      {parts.map((part, i) => (
+                        <React.Fragment key={i}>
+                          {part}
+                          {i < parts.length - 1 && (
+                            <span className="font-bold text-white">{log.playerName}</span>
+                          )}
+                        </React.Fragment>
+                      ))} ⚽
+                    </span>
+                  );
+                }
+
+                if (log.customMessage && log.playerName) {
+                  const parts = log.customMessage.split(log.playerName);
+                  return (
+                    <span>
+                      {parts.map((part, i) => (
+                        <React.Fragment key={i}>
+                          {part}
+                          {i < parts.length - 1 && (
+                            <span className="font-bold text-white">{log.playerName}</span>
+                          )}
+                        </React.Fragment>
+                      ))} ⚽
+                    </span>
+                  );
+                }
+
+                return (
+                  <span>
+                    <span className="font-bold text-white">{log.playerName}</span> ha segnato per <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽
+                  </span>
+                );
+              };
+
+              return (
+                <div key={log.id} className="flex justify-between items-center text-sm border-b border-slate-700/50 pb-2 group">
+                  <span className="text-slate-300 flex-1 pr-2">
+                    {log.type === 'start' && <span>🎬 Mettetevi comodi, allacciate le cinture...comincia la partita!</span>}
+                    {log.type === 'end' && <span>🏁 Finisce qui la partita! Col risultato di <span className="font-bold text-white">{log.scoreString}</span></span>}
+                    {(!log.type || log.type === 'goal') && renderGoalLog()}
+                    {log.type === 'undo' && (
+                      <span>❌ A <span className="font-bold text-white">{log.playerName}</span> è stato annullato il goal</span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-500 font-mono text-xs">{log.time}</span>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => deleteLog(log.id)}
+                        className="text-slate-600 hover:text-red-400 transition-colors md:opacity-0 md:group-hover:opacity-100"
+                        title="Elimina log"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
