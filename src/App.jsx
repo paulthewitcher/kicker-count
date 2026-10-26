@@ -46,7 +46,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Ascolta le partite filtrate per il SEED corrente
   useEffect(() => {
     if (!user || !seed) return;
     const unsubscribe = subscribeToEvents(
@@ -135,7 +134,6 @@ export default function App() {
               setCurrentEventId(id);
               setView('EVENT');
             }} 
-            onOpenSeedModal={() => setShowSeedModal(true)}
           />
         )}
 

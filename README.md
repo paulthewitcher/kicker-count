@@ -1,6 +1,6 @@
-# KickerLive (Multi-Tenant Seed Version)
+# KickerLive (Opera Goal Commentary Feature)
 
-App web per il monitoraggio e la gestione in tempo reale di partite di biliardino con gestione stanze tramite **Seed**.
+App web per il monitoraggio e la gestione in tempo reale di partite di biliardino.
 
 ## Istruzioni per l'avvio in VS Code
 

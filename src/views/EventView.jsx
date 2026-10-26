@@ -1,6 +1,6 @@
 import React, { useState, useEffect, memo } from 'react';
 import { ArrowLeft, Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus, Clock, Trash2, Check, RotateCcw, Hash } from 'lucide-react';
-import { EMOJI_LIST } from '../utils/constants';
+import { EMOJI_LIST, OPERA_GOAL_TEMPLATES } from '../utils/constants';
 import { getTeamScore, getSortedPlayers } from '../utils/helpers';
 import { updateEventData, addEmojiReaction, subscribeToSingleEvent } from '../services/eventService';
 import ReactionButton from '../components/ReactionButton';
@@ -166,13 +166,25 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         const timeString = now.toLocaleTimeString('it-IT', { hour12: false });
         
         if (delta > 0) {
+          const isOperaTeam = newTeams[teamIndex].name.toLowerCase().includes('opera');
+          const currentTeamScore = getTeamScore(newTeams[teamIndex]);
+          let customMessage = null;
+
+          // Se la squadra è OPERA e si trova dal 4° goal in poi
+          if (isOperaTeam && currentTeamScore >= 4) {
+            const randomIndex = Math.floor(Math.random() * OPERA_GOAL_TEMPLATES.length);
+            const template = OPERA_GOAL_TEMPLATES[randomIndex];
+            customMessage = template.replace(/<giocatore>/g, player.name);
+          }
+
           newTimeline = [{
             id: crypto.randomUUID(),
             type: 'goal',
             playerName: player.name,
             teamName: newTeams[teamIndex].name,
             time: timeString,
-            timestamp: now.getTime()
+            timestamp: now.getTime(),
+            customMessage: customMessage
           }, ...newTimeline];
 
           addEmojiReaction(event.id, '⚽');
@@ -538,7 +550,11 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
                   {log.type === 'start' && <span>🎬 Inizia lo spettacolo</span>}
                   {log.type === 'end' && <span>🏁 Finisce qui la partita col risultato di <span className="font-bold text-white">{log.scoreString}</span></span>}
                   {(!log.type || log.type === 'goal') && (
-                    <span><span className="font-bold text-white">{log.playerName}</span> ha segnato per <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽</span>
+                    log.customMessage ? (
+                      <span><span className="font-medium text-emerald-300">{log.customMessage}</span> ⚽</span>
+                    ) : (
+                      <span><span className="font-bold text-white">{log.playerName}</span> ha segnato per <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽</span>
+                    )
                   )}
                   {log.type === 'undo' && (
                     <span>❌ A <span className="font-bold text-white">{log.playerName}</span> è stato annullato il goal</span>

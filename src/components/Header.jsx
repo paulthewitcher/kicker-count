@@ -19,7 +19,7 @@ const Header = memo(function Header({ nickname, seed, view, setView, onOpenLogou
           {seed && view !== 'LOGIN' && (
             <button
               onClick={onOpenSeedModal}
-              className="text-xs text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/30 transition-all px-2.5 py-1 rounded-full flex items-center gap-1 cursor-pointer font-mono font-semibold"
+              className="text-xs text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/30 transition-all px-2.5 py-1 rounded-full flex items-center gap-1 cursor-pointer font-mono font-semibold active:scale-95"
               title="Cambia Seed Stanza"
             >
               <Hash className="w-3.5 h-3.5 text-emerald-400" />
