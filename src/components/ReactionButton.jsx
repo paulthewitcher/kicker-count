@@ -15,17 +15,17 @@ export default function ReactionButton({ emoji, count = 0, onClick }) {
           const id = Date.now() + Math.random();
           const newParticles = Array.from({ length: 8 }).map((_, i) => ({
             id: `${id}-${i}`,
-            xOffset: (Math.random() - 0.5) * 120,
-            scale: 0.8 + Math.random() * 0.8,
-            duration: 1.2 + Math.random() * 0.8,
-            rotation: (Math.random() - 0.5) * 45
+            xOffset: (Math.random() - 0.5) * 160,
+            scale: 0.9 + Math.random() * 0.9,
+            duration: 2.5 + Math.random() * 1.0,
+            rotation: (Math.random() - 0.5) * 60
           }));
 
           setParticles(prev => [...prev, ...newParticles]);
 
           setTimeout(() => {
             setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
-          }, 2000);
+          }, 3800);
         }, j * 150);
       }
     }
@@ -41,11 +41,11 @@ export default function ReactionButton({ emoji, count = 0, onClick }) {
 
   return (
     <div className="relative flex flex-col items-center">
-      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 pointer-events-none overflow-visible z-30 w-0 h-0">
+      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 pointer-events-none overflow-visible z-40 w-0 h-0">
         {particles.map(p => (
           <span
             key={p.id}
-            className="absolute text-2xl select-none animate-instagram-float"
+            className="absolute text-3xl select-none animate-instagram-float drop-shadow-lg"
             style={{
               left: `${p.xOffset}px`,
               '--tw-scale-x': p.scale,
@@ -79,17 +79,21 @@ export default function ReactionButton({ emoji, count = 0, onClick }) {
             opacity: 1;
             transform: translateY(0px) scale(0.6) rotate(0deg);
           }
-          50% {
-            opacity: 0.9;
-            transform: translateY(-120px) scale(1.2) rotate(10deg);
+          20% {
+            opacity: 1;
+            transform: translateY(-120px) scale(1.1) rotate(15deg);
+          }
+          65% {
+            opacity: 0.95;
+            transform: translateY(-400px) scale(1.3) rotate(-15deg);
           }
           100% {
             opacity: 0;
-            transform: translateY(-240px) scale(1) rotate(-10deg);
+            transform: translateY(-680px) scale(1) rotate(20deg);
           }
         }
         .animate-instagram-float {
-          animation: instagramFloat linear forwards;
+          animation: instagramFloat ease-out forwards;
         }
       `}</style>
     </div>

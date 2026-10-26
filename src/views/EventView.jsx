@@ -237,9 +237,9 @@ export default function EventView({ event, user, goBack }) {
         </button>
       </div>
 
-      <div className="bg-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl border border-slate-700 relative overflow-hidden flex-1 flex flex-col">
+      <div className="bg-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl border border-slate-700 relative flex-1 flex flex-col">
         
-        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80"></div>
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80 rounded-t-3xl"></div>
 
         <div className="text-center mb-6 mt-2 relative group/title flex flex-col items-center">
           {isAdmin && isEditingTitle ? (
