@@ -1,16 +1,18 @@
-# React + Vite
+# KickerLive
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+App web per il monitoraggio e la gestione in tempo reale di partite di biliardino.
 
-Currently, two official plugins are available:
+## Istruzioni per l'avvio in VS Code
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. Estrai il contenuto del file ZIP in una cartella a tua scelta.
+2. Apri la cartella estratta in **Visual Studio Code**.
+3. Apri il terminale integrato in VS Code (`Ctrl + ~` o `Cmd + ~`).
+4. Installa le dipendenze eseguendo:
+   ```bash
+   npm install
+   ```
+5. Avvia il server di sviluppo locale:
+   ```bash
+   npm run dev
+   ```
+6. Clicca sul link locale apparso nel terminale (es. `http://localhost:5173`).
