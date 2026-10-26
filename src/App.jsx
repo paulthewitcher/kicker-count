@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
-import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { Trophy, Plus, ArrowLeft, Activity, Users, Flame, Check, Play, RotateCcw, Trash2, History, X, Share2, Clock, Edit2, ChevronDown, ChevronUp, Palette, UserMinus } from 'lucide-react';
 
 // --- FIREBASE INITIALIZATION ---
@@ -107,7 +107,7 @@ export default function App() {
     setNickname('');
     setView('LOGIN');
     setShowLogoutConfirm(false);
-    await signOut(auth); // Effettua il vero logout rigenerando l'ID utente anonimo
+    await signOut(auth);
   };
 
   const currentEvent = events.find(e => e.id === currentEventId);
@@ -526,7 +526,7 @@ function EventView({ event, user, goBack }) {
     return baseScore + (team.scoreOffset || 0);
   };
 
-  // Funzione per ordinare i giocatori
+  // Funzione per ordinare i giocatori (Fix 4: ordine decrescente)
   const getSortedPlayers = (players) => {
     return [...(players || [])].sort((a, b) => b.goals - a.goals);
   };
@@ -590,7 +590,7 @@ function EventView({ event, user, goBack }) {
     setTeamModal({ isOpen: false, teamIndex: null, name: '', color: '' });
   };
 
-  // Funzioni gestione Punteggio
+  // Funzioni gestione Punteggio Rapido (Fix 1)
   const handleScoreSave = (teamIndex) => {
     const team = event.teams[teamIndex];
     const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
@@ -693,10 +693,12 @@ function EventView({ event, user, goBack }) {
     updateEventData({ timeline: newTimeline });
   };
 
+  // Fix: Utilizzo di increment() per evitare accavallamenti tra utenti contemporanei
   const addReaction = (type) => {
-    const newReactions = { ...event.reactions };
-    newReactions[type] = (newReactions[type] || 0) + 1;
-    updateEventData({ reactions: newReactions });
+    const eventRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'kicker-app-id', 'public', 'data', 'events', event.id);
+    updateDoc(eventRef, {
+      [`reactions.${type}`]: increment(1)
+    });
   };
 
   const shareOnWhatsApp = () => {
@@ -869,7 +871,7 @@ function EventView({ event, user, goBack }) {
             </div>
           </div>
 
-          {/* LISTA FORMAZIONI CON TOGGLE SEPARATI */}
+          {/* LISTA FORMAZIONI CON TOGGLE SEPARATI E ORDINE DECRESCENTE */}
           <div className="space-y-4 transition-all">
             
             {/* Blocco Squadra 0 */}
@@ -899,7 +901,7 @@ function EventView({ event, user, goBack }) {
               </div>
 
               {showTeam0Players && (
-                <div className="divide-y divide-slate-700/50 px-4">
+                <div className="divide-y divide-slate-700/50 px-4 transition-all">
                   {(!event.teams[0].players || event.teams[0].players.length === 0) ? (
                     <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
                   ) : (
@@ -971,7 +973,7 @@ function EventView({ event, user, goBack }) {
               </div>
 
               {showTeam1Players && (
-                <div className="divide-y divide-slate-700/50 px-4">
+                <div className="divide-y divide-slate-700/50 px-4 transition-all">
                   {(!event.teams[1].players || event.teams[1].players.length === 0) ? (
                     <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
                   ) : (
@@ -1084,6 +1086,7 @@ function EventView({ event, user, goBack }) {
 
       <div className="mt-8 mb-4">
         <h3 className="text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Reazioni Pubblico</h3>
+        {/* Griglia 3 righe x 4 colonne (Fix 2) */}
         <div className="grid grid-cols-4 gap-3 md:gap-4 justify-items-center max-w-sm mx-auto">
           {EMOJI_LIST.map((emoji) => (
              <ReactionButton 
@@ -1238,26 +1241,47 @@ function EventView({ event, user, goBack }) {
 function ReactionButton({ emoji, count = 0, onClick }) {
   const [animate, setAnimate] = useState(false);
   const [particles, setParticles] = useState([]);
+  
+  // Utilizziamo useRef per tracciare il conteggio precedente e reagire solo agli incrementi
+  const prevCountRef = useRef(count);
+
+  useEffect(() => {
+    // Se il count attuale è MAGGIORE del precedente significa che qualcuno nel mondo ha cliccato
+    if (count > prevCountRef.current) {
+      const diff = count - prevCountRef.current;
+      // Per non affollare lo schermo, limitiamo i burst simultanei se il count salta tanto di botto
+      const bursts = Math.min(diff, 3); 
+
+      for (let j = 0; j < bursts; j++) {
+        setTimeout(() => {
+          const id = Date.now() + Math.random();
+          const newParticles = Array.from({ length: 8 }).map((_, i) => ({
+            id: `${id}-${i}`,
+            xOffset: (Math.random() - 0.5) * 120,
+            scale: 0.8 + Math.random() * 0.8,
+            duration: 1.2 + Math.random() * 0.8,
+            rotation: (Math.random() - 0.5) * 45
+          }));
+
+          setParticles(prev => [...prev, ...newParticles]);
+
+          setTimeout(() => {
+            setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
+          }, 2000);
+        }, j * 150); // piccolo ritardo tra burst multipli
+      }
+    }
+    
+    // Aggiorna il reference per il prossimo render
+    prevCountRef.current = count;
+  }, [count, emoji]);
 
   const handleClick = () => {
+    // Animazione bottone premuto locale
     setAnimate(true);
     setTimeout(() => setAnimate(false), 300);
+    // Avvisa Firebase (questo scatenerà il count > prevCountRef in TUTTI i client compreso questo)
     onClick();
-
-    const id = Date.now();
-    const newParticles = Array.from({ length: 10 }).map((_, i) => ({
-      id: `${id}-${i}`,
-      xOffset: (Math.random() - 0.5) * 120,
-      scale: 0.8 + Math.random() * 0.8,
-      duration: 1.2 + Math.random() * 0.8,
-      rotation: (Math.random() - 0.5) * 45
-    }));
-
-    setParticles(prev => [...prev, ...newParticles]);
-
-    setTimeout(() => {
-      setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
-    }, 2000);
   };
 
   return (
