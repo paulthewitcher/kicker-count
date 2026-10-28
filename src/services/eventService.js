@@ -3,31 +3,32 @@ import {
   collection, 
   addDoc, 
   setDoc,
+  updateDoc,
   deleteDoc, 
   doc, 
   getDoc, 
   onSnapshot, 
   query, 
   orderBy, 
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion 
 } from 'firebase/firestore';
 
 const EVENTS_COLLECTION_PATH = 'artifacts/kicker-app-id/public/data/events';
 
-// 1. Aggiunta della funzione mancano per la creazione dell'evento
+// 1. Creazione Evento (richiesto da CreateMatchView.jsx)
 export const createEvent = async (eventData) => {
-  // Se eventData ha un ID personalizzato o una password
   if (eventData.id) {
     const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventData.id);
     await setDoc(eventRef, {
       title: eventData.title || 'Nuovo Evento',
       deletePassword: eventData.deletePassword || 'opera2019',
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      ...eventData
     }, { merge: true });
     return eventData.id;
   }
 
-  // Creazione documento con ID generato automaticamente da Firestore
   const eventsRef = collection(db, EVENTS_COLLECTION_PATH);
   const docRef = await addDoc(eventsRef, {
     ...eventData,
@@ -37,7 +38,39 @@ export const createEvent = async (eventData) => {
   return docRef.id;
 };
 
-// 2. Inserimento log (start o end)
+// 2. Ascolto Singolo Evento in Tempo Reale (richiesto da EventView.jsx)
+export const subscribeToSingleEvent = (eventId, callback) => {
+  const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventId);
+  return onSnapshot(eventRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback({ id: docSnap.id, ...docSnap.data() });
+    } else {
+      callback(null);
+    }
+  }, (error) => {
+    console.error("Errore subscribeToSingleEvent:", error);
+    callback(null);
+  });
+};
+
+// 3. Aggiornamento Dati Evento (richiesto da EventView.jsx)
+export const updateEventData = async (eventId, updateData) => {
+  const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventId);
+  return await updateDoc(eventRef, {
+    ...updateData,
+    updatedAt: serverTimestamp()
+  });
+};
+
+// 4. Aggiunta Reazione Emoji (richiesto da EventView.jsx)
+export const addEmojiReaction = async (eventId, reactionData) => {
+  const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventId);
+  return await updateDoc(eventRef, {
+    reactions: arrayUnion(reactionData)
+  });
+};
+
+// 5. Inserimento Log Partita (start / end)
 export const addMatchLog = async (eventId, logType) => {
   const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
   return await addDoc(logsRef, {
@@ -46,12 +79,12 @@ export const addMatchLog = async (eventId, logType) => {
   });
 };
 
-// 3. Elimina singolo log
+// 6. Elimina Singolo Log
 export const deleteMatchLog = async (eventId, logId) => {
   return await deleteDoc(doc(db, EVENTS_COLLECTION_PATH, eventId, 'logs', logId));
 };
 
-// 4. Ascolto log in tempo reale
+// 7. Ascolto Log in Tempo Reale
 export const subscribeToLogs = (eventId, callback) => {
   const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
   const q = query(logsRef, orderBy('timestamp', 'asc'));
@@ -65,7 +98,7 @@ export const subscribeToLogs = (eventId, callback) => {
   });
 };
 
-// 5. Elimina evento previa password
+// 8. Elimina Evento previa Verifica Password
 export const deleteEventWithPassword = async (eventId, inputPassword) => {
   const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventId);
   const eventSnap = await getDoc(eventRef);
