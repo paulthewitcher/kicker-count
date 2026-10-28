@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Plus, History } from 'lucide-react';
 import EventCard from '../components/EventCard';
 
-const DashboardView = memo(function DashboardView({ events, seed, goToCreate, openEvent }) {
+const DashboardView = memo(function DashboardView({ events, seed, goToCreate, openEvent, onRequestDelete }) {
   const liveEvents = events.filter(e => e.status === 'live');
   const pastEvents = events.filter(e => e.status === 'ended');
 
@@ -40,7 +40,12 @@ const DashboardView = memo(function DashboardView({ events, seed, goToCreate, op
           ) : (
             <div className="space-y-3">
               {liveEvents.map(event => (
-                <EventCard key={event.id} event={event} onClick={() => openEvent(event.id)} />
+                <EventCard 
+                  key={event.id} 
+                  event={event} 
+                  onClick={() => openEvent(event.id)} 
+                  onDeleteClick={onRequestDelete}
+                />
               ))}
             </div>
           )}
@@ -53,7 +58,12 @@ const DashboardView = memo(function DashboardView({ events, seed, goToCreate, op
             </h2>
             <div className="space-y-3 opacity-80 hover:opacity-100 transition-opacity">
               {pastEvents.map(event => (
-                <EventCard key={event.id} event={event} onClick={() => openEvent(event.id)} />
+                <EventCard 
+                  key={event.id} 
+                  event={event} 
+                  onClick={() => openEvent(event.id)} 
+                  onDeleteClick={onRequestDelete}
+                />
               ))}
             </div>
           </section>

@@ -1,5 +1,5 @@
 import { db, appId } from './firebase';
-import { collection, doc, onSnapshot, setDoc, updateDoc, increment } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
 
 export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
   const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
@@ -33,7 +33,8 @@ export const subscribeToSingleEvent = (eventId, onEventUpdate, onError) => {
 export const createEvent = async ({ user, nickname, seed, title, importId, pastEvents }) => {
   const newEventId = crypto.randomUUID();
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', newEventId);
-  
+  const startTime = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
   let teams = [
     { id: 't1', name: 'Squadra Rossa', color: '#ef4444', players: [], scoreOffset: 0 },
     { id: 't2', name: 'Squadra Blu', color: '#174195', players: [], scoreOffset: 0 }
@@ -60,6 +61,8 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
     adminName: nickname,
     seed: (seed || '').trim().toLowerCase(),
     status: 'live',
+    statusText: `Partita iniziata alle ${startTime}`,
+    startTime: startTime,
     createdAt: Date.now(),
     teams: teams,
     reactions: {},
@@ -78,6 +81,11 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
 export const updateEventData = async (eventId, newData) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   await updateDoc(eventRef, newData);
+};
+
+export const deleteEvent = async (eventId) => {
+  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  await deleteDoc(eventRef);
 };
 
 export const addEmojiReaction = async (eventId, type) => {

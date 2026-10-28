@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './services/firebase';
-import { subscribeToEvents } from './services/eventService';
+import { subscribeToEvents, deleteEvent } from './services/eventService';
 import Header from './components/Header';
 import LogoutModal from './components/modals/LogoutModal';
 import EditSeedModal from './components/modals/EditSeedModal';
+import DeleteEventModal from './components/modals/DeleteEventModal';
 import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
 import CreateMatchView from './views/CreateMatchView';
@@ -23,6 +24,8 @@ export default function App() {
   const [currentEventId, setCurrentEventId] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
+  
+  const [deleteEventModal, setDeleteEventModal] = useState({ isOpen: false, event: null });
 
   useEffect(() => {
     const initAuth = async () => {
@@ -93,6 +96,17 @@ export default function App() {
     }
   };
 
+  const handleDeleteConfirmed = async () => {
+    if (deleteEventModal.event) {
+      await deleteEvent(deleteEventModal.event.id);
+      if (currentEventId === deleteEventModal.event.id) {
+        setCurrentEventId(null);
+        setView('DASHBOARD');
+      }
+      setDeleteEventModal({ isOpen: false, event: null });
+    }
+  };
+
   const currentEvent = events.find(e => e.id === currentEventId);
 
   if (authLoading) {
@@ -133,7 +147,8 @@ export default function App() {
             openEvent={(id) => {
               setCurrentEventId(id);
               setView('EVENT');
-            }} 
+            }}
+            onRequestDelete={(event) => setDeleteEventModal({ isOpen: true, event })}
           />
         )}
 
@@ -184,6 +199,14 @@ export default function App() {
         currentSeed={seed}
         onClose={() => setShowSeedModal(false)}
         onSave={handleUpdateSeed}
+      />
+
+      <DeleteEventModal
+        isOpen={deleteEventModal.isOpen}
+        eventTitle={deleteEventModal.event?.title || ''}
+        systemPassword="opera2019"
+        onClose={() => setDeleteEventModal({ isOpen: false, event: null })}
+        onConfirm={handleDeleteConfirmed}
       />
     </div>
   );

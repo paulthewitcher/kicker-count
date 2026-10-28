@@ -50,16 +50,28 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
 
   const setMatchStatus = (status) => {
     if (!isAdmin) return;
-    const updates = { status };
+    const now = new Date();
+    const timeFormatted = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
     
-    if (status === 'ended' && event.status === 'live') {
+    let updates = { status };
+
+    if (status === 'ended') {
       const scoreA = getTeamScore(event.teams[0]);
       const scoreB = getTeamScore(event.teams[1]);
-      const now = new Date();
+      updates.statusText = `Partita terminata alle ${timeFormatted}`;
+      updates.endTime = timeFormatted;
       updates.timeline = [{
         id: crypto.randomUUID(),
         type: 'end',
         scoreString: `${scoreA}-${scoreB}`,
+        time: now.toLocaleTimeString('it-IT', { hour12: false }),
+        timestamp: now.getTime()
+      }, ...(event.timeline || [])];
+    } else if (status === 'live') {
+      updates.statusText = `Partita iniziata alle ${timeFormatted}`;
+      updates.timeline = [{
+        id: crypto.randomUUID(),
+        type: 'start',
         time: now.toLocaleTimeString('it-IT', { hour12: false }),
         timestamp: now.getTime()
       }, ...(event.timeline || [])];
@@ -170,7 +182,6 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
           const currentTeamScore = getTeamScore(newTeams[teamIndex]);
           let customTemplate = null;
 
-          // Se la squadra è OPERA e si trova dal 4° goal in poi
           if (isOperaTeam && currentTeamScore >= 4) {
             const randomIndex = Math.floor(Math.random() * OPERA_GOAL_TEMPLATES.length);
             customTemplate = OPERA_GOAL_TEMPLATES[randomIndex];
@@ -212,25 +223,18 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
   const shareOnWhatsApp = () => {
     const scoreA = getTeamScore(event.teams[0]);
     const scoreB = getTeamScore(event.teams[1]);
-    let text = `🏆 *${event.title}* (Stanza #${event.seed || 'default'})
-
-`;
-    text += `🔴 *${event.teams[0].name}* ${scoreA} - ${scoreB} *${event.teams[1].name}* 🔵
-
-`;
-    text += `⚽ *Marcatori:*
-`;
+    let text = `🏆 *${event.title}* (Stanza #${event.seed || 'default'})\n\n`;
+    text += `🔴 *${event.teams[0].name}* ${scoreA} - ${scoreB} *${event.teams[1].name}* 🔵\n\n`;
+    text += `⚽ *Marcatori:*\n`;
     
     event.teams.forEach((team, idx) => {
       const icon = idx === 0 ? '🔴' : '🔵';
       const scorers = getSortedPlayers(team.players).filter(p => p.goals > 0);
       if (scorers.length > 0) {
-        text += `${icon} *${team.name}*:
-`;
+        text += `${icon} *${team.name}*:\n`;
         scorers.forEach(p => {
           const jersey = p.jersey ? ` [${p.jersey}]` : '';
-          text += `  ➔ ${p.name}${jersey}: ${p.goals} gol
-`;
+          text += `  ➔ ${p.name}${jersey}: ${p.goals} gol\n`;
         });
       }
     });
@@ -506,7 +510,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
                             </button>
                           )}
                           <span className="font-medium text-slate-200 text-sm">
-                            {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono">#{player.jersey}</span>}
+                            {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono font-normal">#{player.jersey}</span>}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
