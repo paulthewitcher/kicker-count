@@ -177,14 +177,19 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         const now = new Date();
         const timeString = now.toLocaleTimeString('it-IT', { hour12: false });
         
+        let eventUpdates = { teams: newTeams };
+
         if (delta > 0) {
           const isOperaTeam = newTeams[teamIndex].name.toLowerCase().includes('opera');
           const currentTeamScore = getTeamScore(newTeams[teamIndex]);
           let customTemplate = null;
+          let nextOperaGoalIndex = event.operaGoalIndex || 0;
 
+          // Dal quarto gol in poi (dopo il terzo) scorre i template in ordine
           if (isOperaTeam && currentTeamScore >= 4) {
-            const randomIndex = Math.floor(Math.random() * OPERA_GOAL_TEMPLATES.length);
-            customTemplate = OPERA_GOAL_TEMPLATES[randomIndex];
+            customTemplate = OPERA_GOAL_TEMPLATES[nextOperaGoalIndex];
+            nextOperaGoalIndex = (nextOperaGoalIndex + 1) % OPERA_GOAL_TEMPLATES.length;
+            eventUpdates.operaGoalIndex = nextOperaGoalIndex;
           }
 
           newTimeline = [{
@@ -209,7 +214,8 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
           }, ...newTimeline];
         }
 
-        updateEventData(event.id, { teams: newTeams, timeline: newTimeline });
+        eventUpdates.timeline = newTimeline;
+        updateEventData(event.id, eventUpdates);
       }
     }
   };
