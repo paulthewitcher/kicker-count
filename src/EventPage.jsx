@@ -39,7 +39,7 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
   ]);
   const [isMatchActive, setIsMatchActive] = useState(true);
 
-  // Ascolto in tempo reale su Firebase (se configurato)
+  // Ascolto in tempo reale su Firebase (se attivo)
   useEffect(() => {
     let unsubscribe;
     try {
@@ -51,7 +51,7 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
         }
       });
     } catch (err) {
-      console.log("Firebase listener non attivo, uso stato locale:", err);
+      console.log("Firebase listener non attivo, modalità locale:", err);
     }
     return () => unsubscribe && unsubscribe();
   }, [eventId]);
@@ -71,7 +71,7 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
     try {
       await addMatchLog(eventId, 'start');
     } catch (err) {
-      console.warn("Impossibile salvare su Firestore (modalità locale attiva):", err);
+      console.warn("Firestore non connesso, salvato localmente:", err);
     }
   };
 
@@ -90,7 +90,7 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
     try {
       await addMatchLog(eventId, 'end');
     } catch (err) {
-      console.warn("Impossibile salvare su Firestore (modalità locale attiva):", err);
+      console.warn("Firestore non connesso, salvato localmente:", err);
     }
   };
 
@@ -124,7 +124,6 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
       setIsModalOpen(false);
       setIsDeleted(true);
     } catch (err) {
-      // Se fallisce la chiamata Firebase, verifichiamo anche in fallback locale
       if (inputPassword === 'opera2019') {
         setIsModalOpen(false);
         setIsDeleted(true);
@@ -146,7 +145,7 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
 
   return (
     <div className="event-page-container">
-      {/* Header Evento con Cestino in Alto a Sinistra per Admin */}
+      {/* Header Evento con Cestino in Alto a Sinistra riservato ad Admin */}
       <header className="event-header">
         <div className="header-left">
           {isAdmin && (
@@ -198,7 +197,7 @@ export default function EventPage({ eventId = 'opera2019', initialAdminState = t
                     {log.type === 'start' ? '(inizio)' : '(fine)'}
                   </span>
                   
-                  {/* FIX RICIESTA: Messaggio visibile quando log.type === 'start' */}
+                  {/* FIX CONDIZIONALE: Mostra messaggio quando log.type === 'start' */}
                   {log.type === 'start' && (
                     <span className="start-banner-text">
                       🎬 Mettetevi comodi, allacciate le cinture...comincia la partita!

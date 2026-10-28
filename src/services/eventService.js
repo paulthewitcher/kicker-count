@@ -13,7 +13,7 @@ import {
 
 const EVENTS_COLLECTION_PATH = 'artifacts/kicker-app-id/public/data/events';
 
-// Inserisci log (start o end)
+// Inserisci log ('start' o 'end')
 export const addMatchLog = async (eventId, logType) => {
   const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
   return await addDoc(logsRef, {
