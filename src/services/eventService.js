@@ -2,6 +2,7 @@ import { db } from '../firebase/config';
 import { 
   collection, 
   addDoc, 
+  setDoc,
   deleteDoc, 
   doc, 
   getDoc, 
@@ -13,21 +14,44 @@ import {
 
 const EVENTS_COLLECTION_PATH = 'artifacts/kicker-app-id/public/data/events';
 
-// Inserisci log ('start' o 'end')
+// 1. Aggiunta della funzione mancano per la creazione dell'evento
+export const createEvent = async (eventData) => {
+  // Se eventData ha un ID personalizzato o una password
+  if (eventData.id) {
+    const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventData.id);
+    await setDoc(eventRef, {
+      title: eventData.title || 'Nuovo Evento',
+      deletePassword: eventData.deletePassword || 'opera2019',
+      createdAt: serverTimestamp()
+    }, { merge: true });
+    return eventData.id;
+  }
+
+  // Creazione documento con ID generato automaticamente da Firestore
+  const eventsRef = collection(db, EVENTS_COLLECTION_PATH);
+  const docRef = await addDoc(eventsRef, {
+    ...eventData,
+    deletePassword: eventData.deletePassword || 'opera2019',
+    createdAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+// 2. Inserimento log (start o end)
 export const addMatchLog = async (eventId, logType) => {
   const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
   return await addDoc(logsRef, {
-    type: logType, // 'start' oppure 'end'
+    type: logType,
     timestamp: serverTimestamp()
   });
 };
 
-// Elimina singolo log
+// 3. Elimina singolo log
 export const deleteMatchLog = async (eventId, logId) => {
   return await deleteDoc(doc(db, EVENTS_COLLECTION_PATH, eventId, 'logs', logId));
 };
 
-// Ascolto log in tempo reale
+// 4. Ascolto log in tempo reale
 export const subscribeToLogs = (eventId, callback) => {
   const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
   const q = query(logsRef, orderBy('timestamp', 'asc'));
@@ -41,7 +65,7 @@ export const subscribeToLogs = (eventId, callback) => {
   });
 };
 
-// Elimina evento previa password
+// 5. Elimina evento previa password
 export const deleteEventWithPassword = async (eventId, inputPassword) => {
   const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventId);
   const eventSnap = await getDoc(eventRef);
