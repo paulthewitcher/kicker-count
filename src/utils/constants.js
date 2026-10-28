@@ -14,16 +14,16 @@ export const TEAM_COLORS = [
 export const EMOJI_LIST = ['⚽', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '😈', '🫣', '😱'];
 
 export const OPERA_GOAL_TEMPLATES = [
-  "Gol di <giocatore> ! Andiamo a Berlino, Beppe! Andiamo a Berlino!",
+  "Garra e classe pura: sblocca il match <giocatore>!",
+  "Tiro... ed è rete! Splendido capolavoro di <giocatore>!",
+  "Attenzione a <giocatore>... e c'è il gol! Una perla assoluta!",
+  "Segna sempre lui, <giocatore> È una sentenza, niente da fare!",
   "Palla a <giocatore>, tiro, gol! Gol di <giocatore>!",
   "Parte il tiro... Rete! Sciabolata morbida pazzesca di <giocatore>!",
-  "Tiro... ed è rete! Splendido capolavoro di <giocatore>!",
   "Gol di <giocatore>! Il cielo è azzurro sopra Berlino!",
   "Si gonfia la rete! Che gol pazzesco di <giocatore>!",
   "Super <giocatore>! Gol! Sempre lui, l'ha messa dentro!",
-  "Segna sempre lui, <giocatore> È una sentenza, niente da fare!",
   "Mucchio selvaggio in area... sbroglia tutto <giocatore>! Rete!",
   "Ha spento la luce! Una giocata pazzesca di <giocatore>!",
-  "Attenzione a <giocatore>... e c'è il gol! Una perla assoluta!",
-  "Garra e classe pura: sblocca il match <giocatore>!"
+  "Gol di <giocatore> ! Andiamo a Berlino, Beppe! Andiamo a Berlino!",
 ];
