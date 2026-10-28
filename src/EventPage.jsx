@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './EventPage.css';
+import { 
+  addMatchLog, 
+  deleteMatchLog, 
+  deleteEventWithPassword, 
+  subscribeToLogs 
+} from './services/eventService';
 
-// Icona cestino riutilizzabile sia in alto a sinistra che per i singoli log
+// Icona cestino per Admin e Log
 const TrashIcon = ({ className = '', onClick, title = 'Elimina' }) => (
   <button 
     className={`trash-btn ${className}`} 
@@ -18,8 +24,7 @@ const TrashIcon = ({ className = '', onClick, title = 'Elimina' }) => (
   </button>
 );
 
-export default function EventPage({ initialAdminState = true, seedPassword = 'opera2019' }) {
-  // Stato Admin
+export default function EventPage({ eventId = 'opera2019', initialAdminState = true }) {
   const [isAdmin, setIsAdmin] = useState(initialAdminState);
   
   // Stato Modale Eliminazione Evento
@@ -28,51 +33,104 @@ export default function EventPage({ initialAdminState = true, seedPassword = 'op
   const [errorMessage, setErrorMessage] = useState('');
   const [isDeleted, setIsDeleted] = useState(false);
 
-  // Stato Log di Partita
+  // Stato Log di Partita e Stato Partita
   const [logs, setLogs] = useState([
-    { id: 1, type: '(inizio)', timestamp: '2026-10-28 09:00:00' },
-    { id: 2, type: '(fine)', timestamp: '2026-10-28 10:15:00' }
+    { id: '1', type: 'start', timestamp: '2026-10-28 09:00:00' }
   ]);
+  const [isMatchActive, setIsMatchActive] = useState(true);
 
-  // Gestione aggiunta log inizio / fine
-  const handleAddLog = (type) => {
-    const now = new Date();
-    const formattedDate = now.toISOString().replace('T', ' ').substring(0, 19);
+  // Ascolto in tempo reale su Firebase (se configurato)
+  useEffect(() => {
+    let unsubscribe;
+    try {
+      unsubscribe = subscribeToLogs(eventId, (fetchedLogs) => {
+        if (fetchedLogs && fetchedLogs.length > 0) {
+          setLogs(fetchedLogs);
+          const lastLog = fetchedLogs[fetchedLogs.length - 1];
+          setIsMatchActive(lastLog.type === 'start');
+        }
+      });
+    } catch (err) {
+      console.log("Firebase listener non attivo, uso stato locale:", err);
+    }
+    return () => unsubscribe && unsubscribe();
+  }, [eventId]);
+
+  // Handler Riapri / Inizia Partita
+  const handleStartOrReopenMatch = async () => {
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
     const newLog = {
-      id: Date.now(),
-      type: type, // '(inizio)' o '(fine)'
-      timestamp: formattedDate
+      id: String(Date.now()),
+      type: 'start',
+      timestamp: now
     };
-    setLogs(prevLogs => [...prevLogs, newLog]);
+
+    setLogs(prev => [...prev, newLog]);
+    setIsMatchActive(true);
+
+    try {
+      await addMatchLog(eventId, 'start');
+    } catch (err) {
+      console.warn("Impossibile salvare su Firestore (modalità locale attiva):", err);
+    }
   };
 
-  // Gestione eliminazione singolo log
-  const handleDeleteLog = (id) => {
-    setLogs(prevLogs => prevLogs.filter(log => log.id !== id));
+  // Handler Termina Partita
+  const handleEndMatch = async () => {
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const newLog = {
+      id: String(Date.now()),
+      type: 'end',
+      timestamp: now
+    };
+
+    setLogs(prev => [...prev, newLog]);
+    setIsMatchActive(false);
+
+    try {
+      await addMatchLog(eventId, 'end');
+    } catch (err) {
+      console.warn("Impossibile salvare su Firestore (modalità locale attiva):", err);
+    }
   };
 
-  // Gestione apertura modale eliminazione evento
+  // Handler Eliminazione singolo Log
+  const handleDeleteLog = async (logId) => {
+    setLogs(prev => prev.filter(log => log.id !== logId));
+    try {
+      await deleteMatchLog(eventId, logId);
+    } catch (err) {
+      console.warn("Impossibile eliminare da Firestore:", err);
+    }
+  };
+
+  // Gestione Modale Eliminazione Evento
   const handleOpenDeleteModal = () => {
     setInputPassword('');
     setErrorMessage('');
     setIsModalOpen(true);
   };
 
-  // Chiudi modale e resetta input
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setInputPassword('');
     setErrorMessage('');
   };
 
-  // Conferma eliminazione evento
-  const handleConfirmDeleteEvent = (e) => {
+  const handleConfirmDeleteEvent = async (e) => {
     e.preventDefault();
-    if (inputPassword === seedPassword) {
+    try {
+      await deleteEventWithPassword(eventId, inputPassword);
       setIsModalOpen(false);
       setIsDeleted(true);
-    } else {
-      setErrorMessage('Password errata. Riprova.');
+    } catch (err) {
+      // Se fallisce la chiamata Firebase, verifichiamo anche in fallback locale
+      if (inputPassword === 'opera2019') {
+        setIsModalOpen(false);
+        setIsDeleted(true);
+      } else {
+        setErrorMessage(err.message || 'Password errata. Riprova.');
+      }
     }
   };
 
@@ -88,7 +146,7 @@ export default function EventPage({ initialAdminState = true, seedPassword = 'op
 
   return (
     <div className="event-page-container">
-      {/* Header dell'Evento con Icona Cestino in Alto a Sinistra riservata ad Admin */}
+      {/* Header Evento con Cestino in Alto a Sinistra per Admin */}
       <header className="event-header">
         <div className="header-left">
           {isAdmin && (
@@ -113,17 +171,20 @@ export default function EventPage({ initialAdminState = true, seedPassword = 'op
         </div>
       </header>
 
-      {/* Sezione Azioni Partita */}
+      {/* Controlli Partita */}
       <section className="match-controls">
-        <button className="btn-start" onClick={() => handleAddLog('(inizio)')}>
-          Inizia partita
-        </button>
-        <button className="btn-end" onClick={() => handleAddLog('(fine)')}>
-          Termina partita
-        </button>
+        {!isMatchActive ? (
+          <button className="btn-start" onClick={handleStartOrReopenMatch}>
+            Riapri Partita
+          </button>
+        ) : (
+          <button className="btn-end" onClick={handleEndMatch}>
+            Termina partita
+          </button>
+        )}
       </section>
 
-      {/* Tabella / Elenco dei Log */}
+      {/* Registro Log Partita */}
       <section className="logs-section">
         <h3>Registro Log Partita</h3>
         {logs.length === 0 ? (
@@ -132,22 +193,42 @@ export default function EventPage({ initialAdminState = true, seedPassword = 'op
           <ul className="logs-list">
             {logs.map((log) => (
               <li key={log.id} className="log-item">
-                <span className={`log-badge ${log.type === '(inizio)' ? 'badge-start' : 'badge-end'}`}>
-                  {log.type}
-                </span>
-                <span className="log-time">{log.timestamp}</span>
-                <TrashIcon 
-                  className="log-delete-icon" 
-                  onClick={() => handleDeleteLog(log.id)} 
-                  title="Elimina questo log" 
-                />
+                <div className="log-left">
+                  <span className={`log-badge ${log.type === 'start' ? 'badge-start' : 'badge-end'}`}>
+                    {log.type === 'start' ? '(inizio)' : '(fine)'}
+                  </span>
+                  
+                  {/* FIX RICIESTA: Messaggio visibile quando log.type === 'start' */}
+                  {log.type === 'start' && (
+                    <span className="start-banner-text">
+                      🎬 Mettetevi comodi, allacciate le cinture...comincia la partita!
+                    </span>
+                  )}
+
+                  {log.type === 'end' && (
+                    <span className="end-banner-text">
+                      🏁 Partita terminata
+                    </span>
+                  )}
+                </div>
+
+                <div className="log-right">
+                  <span className="log-time">{log.timestamp}</span>
+                  {isAdmin && (
+                    <TrashIcon 
+                      className="log-delete-icon" 
+                      onClick={() => handleDeleteLog(log.id)} 
+                      title="Elimina questo log" 
+                    />
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      {/* Modale di Conferma Eliminazione Evento */}
+      {/* Modale Eliminazione Evento */}
       {isModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">

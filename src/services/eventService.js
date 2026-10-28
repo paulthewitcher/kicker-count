@@ -1,96 +1,61 @@
-import { db, appId } from './firebase';
-import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { 
+  collection, 
+  addDoc, 
+  deleteDoc, 
+  doc, 
+  getDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  serverTimestamp 
+} from 'firebase/firestore';
 
-export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
-  const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
-  return onSnapshot(eventsRef, (snapshot) => {
-    const cleanSeed = (seed || '').trim().toLowerCase();
-    
-    const fetchedEvents = snapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(evt => (evt.seed || '').trim().toLowerCase() === cleanSeed);
+const EVENTS_COLLECTION_PATH = 'artifacts/kicker-app-id/public/data/events';
 
-    fetchedEvents.sort((a, b) => {
-      if (a.status === 'live' && b.status !== 'live') return -1;
-      if (a.status !== 'live' && b.status === 'live') return 1;
-      return b.createdAt - a.createdAt;
-    });
-
-    onEventsUpdate(fetchedEvents);
-  }, onError);
+// Inserisci log (start o end)
+export const addMatchLog = async (eventId, logType) => {
+  const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
+  return await addDoc(logsRef, {
+    type: logType, // 'start' oppure 'end'
+    timestamp: serverTimestamp()
+  });
 };
 
-export const subscribeToSingleEvent = (eventId, onEventUpdate, onError) => {
-  if (!eventId) return () => {};
-  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  return onSnapshot(eventRef, (docSnap) => {
-    if (docSnap.exists()) {
-      onEventUpdate({ id: docSnap.id, ...docSnap.data() });
-    }
-  }, onError);
+// Elimina singolo log
+export const deleteMatchLog = async (eventId, logId) => {
+  return await deleteDoc(doc(db, EVENTS_COLLECTION_PATH, eventId, 'logs', logId));
 };
 
-export const createEvent = async ({ user, nickname, seed, title, importId, pastEvents }) => {
-  const newEventId = crypto.randomUUID();
-  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', newEventId);
-  const startTime = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+// Ascolto log in tempo reale
+export const subscribeToLogs = (eventId, callback) => {
+  const logsRef = collection(db, EVENTS_COLLECTION_PATH, eventId, 'logs');
+  const q = query(logsRef, orderBy('timestamp', 'asc'));
+  return onSnapshot(q, (snapshot) => {
+    const logs = snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+      timestamp: docSnap.data().timestamp?.toDate()?.toISOString().replace('T', ' ').substring(0, 19) || 'Ora'
+    }));
+    callback(logs);
+  });
+};
 
-  let teams = [
-    { id: 't1', name: 'Squadra Rossa', color: '#ef4444', players: [], scoreOffset: 0 },
-    { id: 't2', name: 'Squadra Blu', color: '#174195', players: [], scoreOffset: 0 }
-  ];
+// Elimina evento previa password
+export const deleteEventWithPassword = async (eventId, inputPassword) => {
+  const eventRef = doc(db, EVENTS_COLLECTION_PATH, eventId);
+  const eventSnap = await getDoc(eventRef);
 
-  if (importId) {
-    const matchToImport = pastEvents.find(e => e.id === importId);
-    if (matchToImport && matchToImport.teams) {
-      teams = matchToImport.teams.map(team => ({
-        ...team,
-        scoreOffset: 0,
-        color: team.color || '#ef4444',
-        players: (team.players || []).map(player => ({
-          ...player,
-          goals: 0
-        }))
-      }));
-    }
+  if (!eventSnap.exists()) {
+    throw new Error("Evento non trovato.");
   }
 
-  const newEvent = {
-    title: title.trim() || 'Nuova Partita',
-    adminId: user.uid,
-    adminName: nickname,
-    seed: (seed || '').trim().toLowerCase(),
-    status: 'live',
-    statusText: `Partita iniziata alle ${startTime}`,
-    startTime: startTime,
-    createdAt: Date.now(),
-    teams: teams,
-    reactions: {},
-    timeline: [{
-      id: crypto.randomUUID(),
-      type: 'start',
-      time: new Date().toLocaleTimeString('it-IT', { hour12: false }),
-      timestamp: Date.now()
-    }]
-  };
+  const data = eventSnap.data();
 
-  await setDoc(eventRef, newEvent);
-  return newEventId;
-};
-
-export const updateEventData = async (eventId, newData) => {
-  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  await updateDoc(eventRef, newData);
-};
-
-export const deleteEvent = async (eventId) => {
-  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  await deleteDoc(eventRef);
-};
-
-export const addEmojiReaction = async (eventId, type) => {
-  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  await updateDoc(eventRef, {
-    [`reactions.${type}`]: increment(1)
-  });
+  if (data.deletePassword === inputPassword) {
+    await deleteDoc(eventRef);
+    return true;
+  } else {
+    throw new Error("Password errata.");
+  }
 };

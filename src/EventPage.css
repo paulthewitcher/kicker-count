@@ -1,4 +1,4 @@
-/* Stili generali della pagina evento */
+/* Layout Generale Event Page */
 .event-page-container {
   max-width: 800px;
   margin: 30px auto;
@@ -10,7 +10,7 @@
   color: #333;
 }
 
-/* Header dell'evento con icona cestino a sinistra */
+/* Header dell'evento con Cestino Admin in alto a sinistra */
 .event-header {
   display: flex;
   align-items: center;
@@ -73,7 +73,7 @@
   cursor: pointer;
 }
 
-/* Pulsanti Inizia / Termina partita */
+/* Pulsanti Partita */
 .match-controls {
   display: flex;
   gap: 16px;
@@ -137,16 +137,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 12px 14px;
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.log-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.log-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .log-badge {
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -161,9 +174,25 @@
   color: #c62828;
 }
 
+/* Testo del messaggio al click su start / riapri partita */
+.start-banner-text {
+  font-weight: 600;
+  color: #0369a1;
+  background-color: #e0f2fe;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.end-banner-text {
+  font-weight: 500;
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
 .log-time {
   color: #6b7280;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-family: monospace;
 }
 
