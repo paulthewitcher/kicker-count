@@ -58,7 +58,7 @@ Il documento Firestore della partita usa questa struttura per i tempi:
 - Ogni gol aggiunge una voce a `players[].goalHistory`, con tempo, timestamp numerico e data/ora locale `dd-mm-yyyy hh:mm:ss`. In caso di annullamento la voce resta nello storico con `status: 'cancelled'` e i dati dell'annullamento.
 - `TOT` somma i gol di tutti i tempi ed è una vista riepilogativa: per assegnare o correggere un gol bisogna selezionare un tempo specifico.
 - L'amministratore può aggiungere un tempo con `+`, rinominarlo e cancellarlo.
-- L'eliminazione richiede la password salvata sul documento Firestore (`deletePassword`, con fallback sul seed della partita). Vengono rimossi anche i gol e i log associati al tempo.
+- L'eliminazione richiede una conferma nella modale. Il valore inserito viene confrontato localmente con il `seed` della partita già caricato da Firestore; non viene incluso in richieste di lettura/scrittura. Vengono rimossi anche i gol e i log associati al tempo.
 - La condivisione WhatsApp include il titolo (senza Seed/Stanza), il risultato e i marcatori totali, seguiti dal risultato e dai marcatori di ogni tempo.
 - Gli eventi precedenti alla nuova struttura rimangono leggibili: i vecchi `players[].goals` vengono interpretati come gol del primo tempo e convertiti nella mappa per tempo al primo aggiornamento che salva i giocatori o i punteggi.
 
@@ -68,25 +68,9 @@ Le reazioni sono disponibili dalla nuova icona sopra la cronologia. La scelta av
 
 > Nota dipendenze: l'archivio ricevuto conteneva un `package-lock.json` riferito a versioni diverse da quelle dichiarate in `package.json` (React/Vite). È stato rimosso per evitare installazioni non riproducibili; `npm install` genererà un lockfile coerente.
 
-## Permessi amministratore e password di eliminazione
+## Permessi amministratore e conferma di eliminazione
 
-- Nella bacheca il cestino di un evento viene mostrato solo quando `event.adminId` coincide con l'UID Firebase dell'utente corrente. Anche l'apertura della modale e l'handler di conferma ripetono il controllo.
-- La cancellazione dell'intera partita e quella di un singolo tempo leggono entrambe `deletePassword` dal documento Firestore dell'evento (con fallback al campo `seed` per i documenti più vecchi). Per cambiare la password di una partita esistente, modifica il campo `deletePassword` nel relativo documento. La modifica vale solo per quella partita.
-- Le nuove partite continuano inizialmente a usare il Seed come valore di `deletePassword`, finché non viene personalizzato il campo sul documento.
-
-**Importante per la sicurezza:** nascondere il pulsante e verificare la password nel client non sostituisce le Firestore Security Rules. Il progetto non includeva un file di regole Firebase, quindi occorre integrare nel ruleset già pubblicato una regola che consenta `delete` solo al proprietario registrato nel documento e gli aggiornamenti completi solo all'amministratore (mantenendo per gli spettatori il solo aggiornamento di `reactions`). Esempio del blocco da adattare al ruleset esistente:
-
-```text
-match /artifacts/{appId}/public/data/events/{eventId} {
-  allow read: if request.auth != null;
-  allow create: if request.auth != null
-                && request.resource.data.adminId == request.auth.uid;
-  allow delete: if request.auth != null
-                && resource.data.adminId == request.auth.uid;
-  allow update: if request.auth != null
-                && (resource.data.adminId == request.auth.uid
-                    || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
-}
-```
-
-Il campo `deletePassword` si trova nel documento dell'evento e, se le regole permettono a tutti gli utenti autenticati di leggere l'evento, non è un segreto: la vera autorizzazione alla cancellazione deve quindi essere imposta dalle Security Rules sopra, non affidata alla sola password lato browser.
+- Nella bacheca il cestino viene mostrato solo quando `event.adminId` coincide con l'UID Firebase dell'utente corrente. L'apertura della modale e l'handler di conferma ripetono il controllo.
+- La modale chiede una conferma. Il valore digitato viene confrontato nel client con il `seed` della partita, già presente nei dati dell'evento. Il valore digitato **non viene inviato** a Firestore, non viene salvato e non viene scritto in alcun campo.
+- Le nuove partite non creano più il campo duplicato `deletePassword`: il codice usa esclusivamente `seed` per il confronto locale. Nei documenti storici il vecchio campo `deletePassword`, se presente, viene ignorato e non viene più letto né aggiornato. Non viene eseguita alcuna migrazione automatica dei dati.
+- Questa conferma è una protezione contro eliminazioni accidentali, non un'autorizzazione server-side: senza modificare le regole Firestore o introdurre un endpoint server, l'autorizzazione effettiva delle operazioni dipende dalle Security Rules già attive nel progetto Firebase. Non è richiesta alcuna Cloud Function, Secret Manager, attivazione Blaze o modifica di configurazione Firebase per questa versione.

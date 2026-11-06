@@ -86,7 +86,6 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
     adminId: user.uid,
     adminName: nickname,
     seed: cleanSeed,
-    deletePassword: cleanSeed || 'opera2019',
     status: 'live',
     statusText: `Partita iniziata alle ${startTime}`,
     startTime: startTime,
@@ -175,7 +174,8 @@ export const subscribeToLogs = (eventId, callback) => {
   });
 };
 
-// 4. Eliminazione evento previa verifica della password (confronta con deletePassword o seed)
+// 4. Conferma eliminazione: confronta localmente il valore inserito con il seed già presente nell'evento.
+// Il valore digitato non viene mai incluso in richieste Firestore.
 export const deleteEventWithPassword = async (eventId, inputPassword) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   const eventSnap = await getDoc(eventRef);
@@ -185,7 +185,7 @@ export const deleteEventWithPassword = async (eventId, inputPassword) => {
   }
 
   const data = eventSnap.data();
-  const expectedPassword = (data.deletePassword || data.seed || '').trim().toLowerCase();
+  const expectedPassword = (data.seed || '').trim().toLowerCase();
   const userPassword = (inputPassword || '').trim().toLowerCase();
 
   if (expectedPassword === userPassword) {
@@ -196,7 +196,8 @@ export const deleteEventWithPassword = async (eventId, inputPassword) => {
   }
 };
 
-// Elimina un tempo solo dopo aver verificato la password memorizzata sul documento Firestore.
+// Elimina un tempo dopo aver confrontato localmente la conferma con il seed già presente nell'evento.
+// La password digitata non viene inviata a Firestore.
 export const deletePeriodWithPassword = async (eventId, periodId, inputPassword) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   const eventSnap = await getDoc(eventRef);
@@ -206,7 +207,7 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword)
   }
 
   const data = eventSnap.data();
-  const expectedPassword = (data.deletePassword || data.seed || '').trim().toLowerCase();
+  const expectedPassword = (data.seed || '').trim().toLowerCase();
   const userPassword = (inputPassword || '').trim().toLowerCase();
 
   if (!expectedPassword || expectedPassword !== userPassword) {
