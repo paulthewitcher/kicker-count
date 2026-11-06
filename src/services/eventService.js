@@ -67,6 +67,19 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
 
   const cleanSeed = (seed || '').trim().toLowerCase();
 
+  const initialPeriodId = 'period-1';
+
+  // Ogni partita parte con il primo tempo e una mappa gol per giocatore.
+  teams = teams.map(team => ({
+    ...team,
+    scoreOffsetsByPeriod: { [initialPeriodId]: 0 },
+    players: (team.players || []).map(player => ({
+      ...player,
+      goals: 0,
+      goalsByPeriod: { [initialPeriodId]: 0 }
+    }))
+  }));
+
   const newEvent = {
     title: title.trim() || 'Nuova Partita',
     adminId: user.uid,
@@ -78,6 +91,13 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
     startTime: startTime,
     createdAt: Date.now(),
     teams: teams,
+    periods: [{
+      id: initialPeriodId,
+      name: '1',
+      number: 1,
+      createdAt: Date.now()
+    }],
+    nextPeriodNumber: 2,
     reactions: {},
     timeline: [{
       id: crypto.randomUUID(),
@@ -173,4 +193,78 @@ export const deleteEventWithPassword = async (eventId, inputPassword) => {
   } else {
     throw new Error("Password errata.");
   }
+};
+
+// Elimina un tempo solo dopo aver verificato la password memorizzata sul documento Firestore.
+export const deletePeriodWithPassword = async (eventId, periodId, inputPassword) => {
+  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  const eventSnap = await getDoc(eventRef);
+
+  if (!eventSnap.exists()) {
+    throw new Error('Partita non trovata.');
+  }
+
+  const data = eventSnap.data();
+  const expectedPassword = (data.deletePassword || data.seed || '').trim().toLowerCase();
+  const userPassword = (inputPassword || '').trim().toLowerCase();
+
+  if (!expectedPassword || expectedPassword !== userPassword) {
+    throw new Error('Password non corretta.');
+  }
+
+  const periods = Array.isArray(data.periods)
+    ? data.periods
+    : [{ id: 'period-1', name: '1', number: 1 }];
+
+  if (!periods.some(period => period.id === periodId)) {
+    throw new Error('Il tempo selezionato non esiste più.');
+  }
+
+  const updatedPeriods = periods.filter(period => period.id !== periodId);
+  const teams = (data.teams || []).map(team => {
+    const players = (team.players || []).map(player => {
+      const goalsByPeriod = player.goalsByPeriod
+        ? { ...player.goalsByPeriod }
+        : { 'period-1': Number(player.goals) || 0 };
+
+      delete goalsByPeriod[periodId];
+
+      const goals = Object.values(goalsByPeriod).reduce(
+        (total, value) => total + (Number(value) || 0),
+        0
+      );
+
+      return { ...player, goalsByPeriod, goals };
+    });
+
+    const scoreOffsetsByPeriod = team.scoreOffsetsByPeriod
+      ? { ...team.scoreOffsetsByPeriod }
+      : { 'period-1': Number(team.scoreOffset) || 0 };
+
+    delete scoreOffsetsByPeriod[periodId];
+
+    const scoreOffset = Object.values(scoreOffsetsByPeriod).reduce(
+      (total, value) => total + (Number(value) || 0),
+      0
+    );
+
+    return { ...team, players, scoreOffsetsByPeriod, scoreOffset };
+  });
+
+  const timeline = (data.timeline || []).filter(log => {
+    if (log.periodId) return log.periodId !== periodId;
+    // Nei vecchi eventi i log dei gol non avevano ancora un riferimento al tempo.
+    if (periodId === 'period-1' && (log.type === 'goal' || log.type === 'undo' || !log.type)) {
+      return false;
+    }
+    return true;
+  });
+
+  await updateDoc(eventRef, {
+    periods: updatedPeriods,
+    teams,
+    timeline
+  });
+
+  return { periods: updatedPeriods, teams, timeline };
 };

@@ -1,11 +1,16 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 
-const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 0, onClick }) {
+const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 0, onClick, animateOnCountChange = true }) {
   const [animate, setAnimate] = useState(false);
   const [particles, setParticles] = useState([]);
   const prevCountRef = useRef(count);
 
   useEffect(() => {
+    if (!animateOnCountChange) {
+      prevCountRef.current = count;
+      return;
+    }
+
     if (count > prevCountRef.current) {
       const diff = count - prevCountRef.current;
       const bursts = Math.min(diff, 3); 
@@ -44,7 +49,7 @@ const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 
     }
     
     prevCountRef.current = count;
-  }, [count, emoji, index]);
+  }, [count, emoji, index, animateOnCountChange]);
 
   const handleClick = () => {
     setAnimate(true);

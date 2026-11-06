@@ -1,27 +1,107 @@
-import React, { useState, useEffect, memo } from 'react';
-import { ArrowLeft, Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus, Clock, Trash2, Check, RotateCcw, Hash } from 'lucide-react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
+import {
+  Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus,
+  Clock, Trash2, Check, RotateCcw, Hash, Smile, X, Lock, Pencil,
+  Save
+} from 'lucide-react';
 import { EMOJI_LIST, OPERA_GOAL_TEMPLATES } from '../utils/constants';
-import { getTeamScore, getSortedPlayers } from '../utils/helpers';
-import { updateEventData, addEmojiReaction, subscribeToSingleEvent } from '../services/eventService';
+import {
+  getSortedPlayers,
+  getEventPeriods,
+  getPlayerGoalsInPeriod,
+  getPlayerTotalGoals,
+  getTeamScoreForPeriod,
+  getTeamTotalScore
+} from '../utils/helpers';
+import {
+  updateEventData,
+  addEmojiReaction,
+  subscribeToSingleEvent,
+  deletePeriodWithPassword
+} from '../services/eventService';
 import ReactionButton from '../components/ReactionButton';
+import ReactionBurst from '../components/ReactionBurst';
 import AddPlayerModal from '../components/modals/AddPlayerModal';
 import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
 
-const EventView = memo(function EventView({ event: initialEvent, user, goBack }) {
+const TOTAL_PERIOD_ID = 'total';
+
+const normalizeMatchPeriods = (sourceEvent) => {
+  const periods = getEventPeriods(sourceEvent);
+  const firstPeriodId = periods[0]?.id || 'period-1';
+
+  const teams = (sourceEvent.teams || []).map(team => {
+    const scoreOffsetsByPeriod = team.scoreOffsetsByPeriod
+      ? { ...team.scoreOffsetsByPeriod }
+      : (periods.length ? { [firstPeriodId]: Number(team.scoreOffset) || 0 } : {});
+
+    const players = (team.players || []).map(player => {
+      const goalsByPeriod = player.goalsByPeriod
+        ? { ...player.goalsByPeriod }
+        : (periods.length ? { [firstPeriodId]: Number(player.goals) || 0 } : {});
+
+      const goals = periods.reduce(
+        (total, period) => total + (Number(goalsByPeriod[period.id]) || 0),
+        0
+      );
+
+      return { ...player, goalsByPeriod, goals };
+    });
+
+    const scoreOffset = Object.values(scoreOffsetsByPeriod).reduce(
+      (total, value) => total + (Number(value) || 0),
+      0
+    );
+
+    return { ...team, players, scoreOffsetsByPeriod, scoreOffset };
+  });
+
+  const highestPeriodNumber = periods.reduce(
+    (highest, period) => Math.max(highest, Number(period.number) || Number.parseInt(period.name, 10) || 0),
+    0
+  );
+
+  return {
+    ...sourceEvent,
+    periods,
+    teams,
+    nextPeriodNumber: Math.max(Number(sourceEvent.nextPeriodNumber) || 1, highestPeriodNumber + 1)
+  };
+};
+
+const getPeriodShareName = (period) => {
+  const name = String(period.name || '').trim();
+  const periodNumber = Number(period.number) || Number.parseInt(name, 10);
+  const isDefaultNumberName = /^\d+$/.test(name) && Number(name) === periodNumber;
+
+  if (!isDefaultNumberName || !periodNumber) return name || 'Tempo';
+
+  const ordinalNames = {
+    1: 'Primo tempo',
+    2: 'Secondo tempo',
+    3: 'Terzo tempo',
+    4: 'Quarto tempo'
+  };
+
+  return ordinalNames[periodNumber] || `${periodNumber}° tempo`;
+};
+
+const EventView = memo(function EventView({ event: initialEvent, user }) {
   const [event, setEvent] = useState(initialEvent);
 
   useEffect(() => {
     const unsubscribe = subscribeToSingleEvent(initialEvent.id, (updatedEvent) => {
       setEvent(updatedEvent);
-    }, (err) => console.error("Error syncing single event:", err));
+    }, (err) => console.error('Error syncing single event:', err));
 
     return () => unsubscribe();
   }, [initialEvent.id]);
 
   const isAdmin = user && event.adminId === user.uid;
   const isLive = event.status === 'live';
-  
+
+  const [selectedPeriodId, setSelectedPeriodId] = useState(TOTAL_PERIOD_ID);
   const [showTeam0Players, setShowTeam0Players] = useState(true);
   const [showTeam1Players, setShowTeam1Players] = useState(true);
 
@@ -35,9 +115,26 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(event.title);
 
+  const [showEmojiModal, setShowEmojiModal] = useState(false);
+  const [isEditingPeriodName, setIsEditingPeriodName] = useState(false);
+  const [draftPeriodName, setDraftPeriodName] = useState('');
+  const [isDeletePeriodModalOpen, setIsDeletePeriodModalOpen] = useState(false);
+  const [periodDeletePassword, setPeriodDeletePassword] = useState('');
+  const [periodDeleteError, setPeriodDeleteError] = useState('');
+  const [isDeletingPeriod, setIsDeletingPeriod] = useState(false);
+
+  const periods = useMemo(() => getEventPeriods(event), [event]);
+  const selectedPeriod = periods.find(period => period.id === selectedPeriodId);
+
   useEffect(() => {
     setTempTitle(event.title);
   }, [event.title]);
+
+  useEffect(() => {
+    if (selectedPeriodId !== TOTAL_PERIOD_ID && !periods.some(period => period.id === selectedPeriodId)) {
+      setSelectedPeriodId(TOTAL_PERIOD_ID);
+    }
+  }, [periods, selectedPeriodId]);
 
   const handleTitleSave = () => {
     if (tempTitle.trim() && tempTitle.trim() !== event.title) {
@@ -50,14 +147,15 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
 
   const setMatchStatus = (status) => {
     if (!isAdmin) return;
+
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-    
-    let updates = { status };
+    const scoreA = getTeamTotalScore(event.teams[0], periods);
+    const scoreB = getTeamTotalScore(event.teams[1], periods);
+
+    const updates = { status };
 
     if (status === 'ended') {
-      const scoreA = getTeamScore(event.teams[0]);
-      const scoreB = getTeamScore(event.teams[1]);
       updates.statusText = `Partita terminata alle ${timeFormatted}`;
       updates.endTime = timeFormatted;
       updates.timeline = [{
@@ -76,7 +174,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         timestamp: now.getTime()
       }, ...(event.timeline || [])];
     }
-    
+
     updateEventData(event.id, updates);
   };
 
@@ -93,32 +191,63 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
   const handleSaveTeamDetails = (e) => {
     e.preventDefault();
     if (!isAdmin || teamModal.teamIndex === null) return;
-    
+
     const newTeams = [...event.teams];
     const cleanName = teamModal.name.trim();
     if (cleanName) {
-      newTeams[teamModal.teamIndex].name = cleanName;
+      newTeams[teamModal.teamIndex] = {
+        ...newTeams[teamModal.teamIndex],
+        name: cleanName,
+        color: teamModal.color
+      };
+    } else {
+      newTeams[teamModal.teamIndex] = {
+        ...newTeams[teamModal.teamIndex],
+        color: teamModal.color
+      };
     }
-    newTeams[teamModal.teamIndex].color = teamModal.color;
-    
+
     updateEventData(event.id, { teams: newTeams });
     setTeamModal({ isOpen: false, teamIndex: null, name: '', color: '' });
   };
 
-  const handleScoreSave = (teamIndex) => {
-    const team = event.teams[teamIndex];
-    const baseScore = team.players ? team.players.reduce((acc, p) => acc + (p.goals || 0), 0) : 0;
-    const parsed = parseInt(editingScore.tempScore, 10);
-    const newTotal = isNaN(parsed) ? getTeamScore(team) : parsed;
-    updateTeamOffset(teamIndex, newTotal - baseScore);
-    setEditingScore({ teamIndex: null, tempScore: '' });
-  };
+  const getDisplayedPlayerGoals = (player) => (
+    selectedPeriodId === TOTAL_PERIOD_ID
+      ? getPlayerTotalGoals(player, periods)
+      : getPlayerGoalsInPeriod(player, selectedPeriodId, periods)
+  );
 
-  const updateTeamOffset = (teamIndex, newOffset) => {
-    if (!isAdmin || !isLive) return;
-    const newTeams = [...event.teams];
-    newTeams[teamIndex].scoreOffset = newOffset;
-    updateEventData(event.id, { teams: newTeams });
+  const getDisplayedTeamScore = (team) => (
+    selectedPeriodId === TOTAL_PERIOD_ID
+      ? getTeamTotalScore(team, periods)
+      : getTeamScoreForPeriod(team, selectedPeriodId, periods)
+  );
+
+  const handleScoreSave = (teamIndex) => {
+    if (selectedPeriodId === TOTAL_PERIOD_ID || !isAdmin || !isLive) return;
+
+    const normalized = normalizeMatchPeriods(event);
+    const team = normalized.teams[teamIndex];
+    const baseScore = (team.players || []).reduce(
+      (total, player) => total + getPlayerGoalsInPeriod(player, selectedPeriodId, normalized.periods),
+      0
+    );
+
+    const parsed = Number.parseInt(editingScore.tempScore, 10);
+    const newTotal = Number.isNaN(parsed) ? getDisplayedTeamScore(team) : Math.max(0, parsed);
+    const offsets = {
+      ...(team.scoreOffsetsByPeriod || {}),
+      [selectedPeriodId]: newTotal - baseScore
+    };
+
+    team.scoreOffsetsByPeriod = offsets;
+    team.scoreOffset = Object.values(offsets).reduce((total, value) => total + (Number(value) || 0), 0);
+
+    updateEventData(event.id, {
+      periods: normalized.periods,
+      teams: normalized.teams
+    });
+    setEditingScore({ teamIndex: null, tempScore: '' });
   };
 
   const openAddPlayerModal = (teamIndex) => {
@@ -131,16 +260,26 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
   const confirmAddPlayer = (e) => {
     e.preventDefault();
     if (!isAdmin || !isLive || !newPlayerName.trim()) return;
-    
-    const newTeams = [...event.teams];
-    const newPlayer = { 
-      id: crypto.randomUUID(), 
-      name: newPlayerName.trim(), 
+
+    const normalized = normalizeMatchPeriods(event);
+    const newTeams = normalized.teams;
+    const newPlayer = {
+      id: crypto.randomUUID(),
+      name: newPlayerName.trim(),
       jersey: newPlayerJersey.trim(),
-      goals: 0 
+      goals: 0,
+      goalsByPeriod: Object.fromEntries(normalized.periods.map(period => [period.id, 0]))
     };
-    newTeams[playerModal.teamIndex].players = [...(newTeams[playerModal.teamIndex].players || []), newPlayer];
-    updateEventData(event.id, { teams: newTeams });
+
+    newTeams[playerModal.teamIndex].players = [
+      ...(newTeams[playerModal.teamIndex].players || []),
+      newPlayer
+    ];
+
+    updateEventData(event.id, {
+      periods: normalized.periods,
+      teams: newTeams
+    });
     setPlayerModal({ isOpen: false, teamIndex: null });
   };
 
@@ -158,66 +297,89 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
     const { teamIndex, playerId } = deleteConfirmModal;
     if (teamIndex === null || !playerId) return;
 
-    const newTeams = [...event.teams];
-    newTeams[teamIndex].players = newTeams[teamIndex].players.filter(p => p.id !== playerId);
-    updateEventData(event.id, { teams: newTeams });
+    const normalized = normalizeMatchPeriods(event);
+    normalized.teams[teamIndex].players = normalized.teams[teamIndex].players
+      .filter(player => player.id !== playerId);
+
+    updateEventData(event.id, {
+      periods: normalized.periods,
+      teams: normalized.teams
+    });
     setDeleteConfirmModal({ isOpen: false, teamIndex: null, playerId: null, playerName: '' });
   };
 
   const updatePlayerGoal = (teamIndex, playerId, delta) => {
-    if (!isAdmin || !isLive) return;
-    const newTeams = [...event.teams];
-    const player = newTeams[teamIndex].players.find(p => p.id === playerId);
-    if (player) {
-      const newGoals = player.goals + delta;
-      if (newGoals >= 0) {
-        player.goals = newGoals;
-        
-        let newTimeline = event.timeline || [];
-        const now = new Date();
-        const timeString = now.toLocaleTimeString('it-IT', { hour12: false });
-        
-        let eventUpdates = { teams: newTeams };
+    if (!isAdmin || !isLive || selectedPeriodId === TOTAL_PERIOD_ID) return;
 
-        if (delta > 0) {
-          const isOperaTeam = newTeams[teamIndex].name.toLowerCase().includes('opera');
-          const currentTeamScore = getTeamScore(newTeams[teamIndex]);
-          let customTemplate = null;
-          let nextOperaGoalIndex = event.operaGoalIndex || 0;
+    const normalized = normalizeMatchPeriods(event);
+    const newTeams = normalized.teams;
+    const player = newTeams[teamIndex].players.find(item => item.id === playerId);
 
-          // Dal quarto gol in poi (dopo il terzo) scorre i template in ordine
-          if (isOperaTeam && currentTeamScore >= 4) {
-            customTemplate = OPERA_GOAL_TEMPLATES[nextOperaGoalIndex];
-            nextOperaGoalIndex = (nextOperaGoalIndex + 1) % OPERA_GOAL_TEMPLATES.length;
-            eventUpdates.operaGoalIndex = nextOperaGoalIndex;
-          }
+    if (!player) return;
 
-          newTimeline = [{
-            id: crypto.randomUUID(),
-            type: 'goal',
-            playerName: player.name,
-            teamName: newTeams[teamIndex].name,
-            time: timeString,
-            timestamp: now.getTime(),
-            customTemplate: customTemplate,
-            customMessage: customTemplate ? customTemplate.replace(/<giocatore>/g, player.name) : null
-          }, ...newTimeline];
+    const currentGoals = getPlayerGoalsInPeriod(player, selectedPeriodId, normalized.periods);
+    const nextGoals = currentGoals + delta;
+    if (nextGoals < 0) return;
 
-          addEmojiReaction(event.id, '⚽');
-        } else if (delta < 0) {
-          newTimeline = [{
-            id: crypto.randomUUID(),
-            type: 'undo',
-            playerName: player.name,
-            time: timeString,
-            timestamp: now.getTime()
-          }, ...newTimeline];
-        }
+    player.goalsByPeriod = {
+      ...(player.goalsByPeriod || {}),
+      [selectedPeriodId]: nextGoals
+    };
+    player.goals = getPlayerTotalGoals(player, normalized.periods);
 
-        eventUpdates.timeline = newTimeline;
-        updateEventData(event.id, eventUpdates);
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('it-IT', { hour12: false });
+    const selectedPeriodName = normalized.periods.find(period => period.id === selectedPeriodId)?.name || '';
+
+    let newTimeline = event.timeline || [];
+    const eventUpdates = {
+      periods: normalized.periods,
+      teams: newTeams
+    };
+
+    if (delta > 0) {
+      const isOperaTeam = newTeams[teamIndex].name.toLowerCase().includes('opera');
+      const currentTeamScore = getTeamTotalScore(newTeams[teamIndex], normalized.periods);
+      let customTemplate = null;
+      let nextOperaGoalIndex = event.operaGoalIndex || 0;
+
+      // I messaggi speciali continuano a seguire il totale della partita, non il singolo tempo.
+      if (isOperaTeam && currentTeamScore >= 4) {
+        customTemplate = OPERA_GOAL_TEMPLATES[nextOperaGoalIndex];
+        nextOperaGoalIndex = (nextOperaGoalIndex + 1) % OPERA_GOAL_TEMPLATES.length;
+        eventUpdates.operaGoalIndex = nextOperaGoalIndex;
       }
+
+      newTimeline = [{
+        id: crypto.randomUUID(),
+        type: 'goal',
+        playerName: player.name,
+        teamName: newTeams[teamIndex].name,
+        periodId: selectedPeriodId,
+        periodName: selectedPeriodName,
+        time: timeString,
+        timestamp: now.getTime(),
+        customTemplate,
+        customMessage: customTemplate ? customTemplate.replace(/<giocatore>/g, player.name) : null
+      }, ...newTimeline];
+
+      addEmojiReaction(event.id, '⚽').catch(error => {
+        console.warn('Impossibile registrare la reazione al gol:', error);
+      });
+    } else if (delta < 0) {
+      newTimeline = [{
+        id: crypto.randomUUID(),
+        type: 'undo',
+        playerName: player.name,
+        periodId: selectedPeriodId,
+        periodName: selectedPeriodName,
+        time: timeString,
+        timestamp: now.getTime()
+      }, ...newTimeline];
     }
+
+    eventUpdates.timeline = newTimeline;
+    updateEventData(event.id, eventUpdates);
   };
 
   const deleteLog = (logId) => {
@@ -227,55 +389,258 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
   };
 
   const shareOnWhatsApp = () => {
-    const scoreA = getTeamScore(event.teams[0]);
-    const scoreB = getTeamScore(event.teams[1]);
+    const currentPeriods = getEventPeriods(event);
+    const messageEvent = normalizeMatchPeriods(event);
+    const teamA = messageEvent.teams[0];
+    const teamB = messageEvent.teams[1];
+
     let text = `🏆 *${event.title}* (Stanza #${event.seed || 'default'})\n\n`;
-    text += `🔴 *${event.teams[0].name}* ${scoreA} - ${scoreB} *${event.teams[1].name}* 🔵\n\n`;
-    text += `⚽ *Marcatori:*\n`;
-    
-    event.teams.forEach((team, idx) => {
-      const icon = idx === 0 ? '🔴' : '🔵';
-      const scorers = getSortedPlayers(team.players).filter(p => p.goals > 0);
-      if (scorers.length > 0) {
-        text += `${icon} *${team.name}*:\n`;
-        scorers.forEach(p => {
-          const jersey = p.jersey ? ` [${p.jersey}]` : '';
-          text += `  ➔ ${p.name}${jersey}: ${p.goals} gol\n`;
+    text += `🔴 *${teamA.name}* ${getTeamTotalScore(teamA, currentPeriods)} - ${getTeamTotalScore(teamB, currentPeriods)} *${teamB.name}* 🔵\n\n`;
+    text += `⚽ *Marcatori - Totale partita:*\n`;
+
+    const appendScorers = (team, teamIndex, getGoals) => {
+      const icon = teamIndex === 0 ? '🔴' : '🔵';
+      const scorers = getSortedPlayers(team.players, getGoals).filter(player => getGoals(player) > 0);
+
+      text += `${icon} *${team.name}:*\n`;
+      if (scorers.length === 0) {
+        text += '  Nessun gol\n';
+      } else {
+        scorers.forEach(player => {
+          const jersey = player.jersey ? ` [${player.jersey}]` : '';
+          text += `  ➔ ${player.name}${jersey}: ${getGoals(player)} gol\n`;
         });
       }
+    };
+
+    appendScorers(teamA, 0, player => getPlayerTotalGoals(player, currentPeriods));
+    appendScorers(teamB, 1, player => getPlayerTotalGoals(player, currentPeriods));
+
+    currentPeriods.forEach(period => {
+      const periodName = getPeriodShareName(period);
+      const scoreA = getTeamScoreForPeriod(teamA, period.id, currentPeriods);
+      const scoreB = getTeamScoreForPeriod(teamB, period.id, currentPeriods);
+
+      text += `\n⏱ *${periodName}*\n`;
+      text += `🔴 *${teamA.name}* ${scoreA} - ${scoreB} *${teamB.name}* 🔵\n\n`;
+      text += '⚽ *Marcatori:*\n';
+      appendScorers(teamA, 0, player => getPlayerGoalsInPeriod(player, period.id, currentPeriods));
+      appendScorers(teamB, 1, player => getPlayerGoalsInPeriod(player, period.id, currentPeriods));
     });
-    
-    const encoded = encodeURIComponent(text);
-    window.open(`https://wa.me/?text=${encoded}`, '_blank');
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleAddPeriod = async () => {
+    if (!isAdmin) return;
+
+    const normalized = normalizeMatchPeriods(event);
+    const maxNumber = normalized.periods.reduce(
+      (highest, period) => Math.max(highest, Number(period.number) || Number.parseInt(period.name, 10) || 0),
+      0
+    );
+    const nextNumber = Math.max(Number(event.nextPeriodNumber) || 1, maxNumber + 1);
+    const newPeriodId = crypto.randomUUID();
+    const newPeriod = {
+      id: newPeriodId,
+      name: String(nextNumber),
+      number: nextNumber,
+      createdAt: Date.now()
+    };
+
+    const newTeams = normalized.teams.map(team => ({
+      ...team,
+      scoreOffsetsByPeriod: {
+        ...(team.scoreOffsetsByPeriod || {}),
+        [newPeriodId]: 0
+      },
+      players: (team.players || []).map(player => ({
+        ...player,
+        goalsByPeriod: {
+          ...(player.goalsByPeriod || {}),
+          [newPeriodId]: 0
+        }
+      }))
+    }));
+
+    const updates = {
+      periods: [...normalized.periods, newPeriod],
+      nextPeriodNumber: nextNumber + 1,
+      teams: newTeams
+    };
+
+    try {
+      await updateEventData(event.id, updates);
+      setEvent(previous => ({ ...previous, ...updates }));
+      setSelectedPeriodId(newPeriodId);
+      setIsEditingPeriodName(false);
+    } catch (error) {
+      console.error('Impossibile aggiungere il tempo:', error);
+    }
+  };
+
+  const startEditingPeriodName = () => {
+    if (!isAdmin || !selectedPeriod) return;
+    setDraftPeriodName(selectedPeriod.name);
+    setIsEditingPeriodName(true);
+  };
+
+  const savePeriodName = async (e) => {
+    e.preventDefault();
+    if (!isAdmin || !selectedPeriod || !draftPeriodName.trim()) return;
+
+    const updatedPeriods = periods.map(period => (
+      period.id === selectedPeriodId
+        ? { ...period, name: draftPeriodName.trim() }
+        : period
+    ));
+
+    try {
+      await updateEventData(event.id, { periods: updatedPeriods });
+      setEvent(previous => ({ ...previous, periods: updatedPeriods }));
+      setIsEditingPeriodName(false);
+    } catch (error) {
+      console.error('Impossibile rinominare il tempo:', error);
+    }
+  };
+
+  const openDeletePeriodModal = () => {
+    if (!isAdmin || !selectedPeriod) return;
+    setPeriodDeletePassword('');
+    setPeriodDeleteError('');
+    setIsDeletePeriodModalOpen(true);
+  };
+
+  const closeDeletePeriodModal = () => {
+    if (isDeletingPeriod) return;
+    setIsDeletePeriodModalOpen(false);
+    setPeriodDeletePassword('');
+    setPeriodDeleteError('');
+  };
+
+  const confirmDeletePeriod = async (e) => {
+    e.preventDefault();
+    if (!selectedPeriod || !periodDeletePassword.trim()) return;
+
+    setIsDeletingPeriod(true);
+    setPeriodDeleteError('');
+
+    try {
+      const result = await deletePeriodWithPassword(event.id, selectedPeriod.id, periodDeletePassword);
+      setEvent(previous => ({
+        ...previous,
+        periods: result.periods,
+        teams: result.teams,
+        timeline: result.timeline
+      }));
+      setSelectedPeriodId(TOTAL_PERIOD_ID);
+      setIsEditingPeriodName(false);
+      setIsDeletePeriodModalOpen(false);
+      setPeriodDeletePassword('');
+    } catch (error) {
+      setPeriodDeleteError(error.message || 'Impossibile eliminare il tempo. Riprova.');
+    } finally {
+      setIsDeletingPeriod(false);
+    }
   };
 
   const color0 = event.teams[0].color || '#ef4444';
   const color1 = event.teams[1].color || '#174195';
 
+  const renderTeamPlayers = (teamIndex, expanded, setExpanded, color) => {
+    const team = event.teams[teamIndex];
+    const players = getSortedPlayers(team.players, getDisplayedPlayerGoals);
+
+    return (
+      <div className="bg-slate-900/40 rounded-xl border overflow-hidden shadow-md" style={{ borderColor: `${color}33` }}>
+        <div
+          onClick={() => setExpanded(!expanded)}
+          className="px-4 py-2.5 font-bold text-xs tracking-wider flex justify-between items-center cursor-pointer transition-colors hover:bg-white/5"
+          style={{ backgroundColor: `${color}15`, color }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: color }}></span>
+            <span className="truncate">{team.name.toUpperCase()} ({team.players?.length || 0})</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isAdmin && isLive && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openAddPlayerModal(teamIndex); }}
+                className="text-xs bg-black/30 hover:bg-black/50 px-2 py-1 rounded text-white flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> Aggiungi
+              </button>
+            )}
+            <span className="text-slate-400 text-xs flex items-center gap-1">
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </span>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="divide-y divide-slate-700/50 px-4 transition-all">
+            {(!team.players || team.players.length === 0) ? (
+              <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
+            ) : (
+              players.map(player => (
+                <div key={player.id} className="flex justify-between items-center py-3 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isAdmin && isLive && (
+                      <button
+                        onClick={() => promptRemovePlayer(teamIndex, player)}
+                        className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg bg-slate-950/40 hover:bg-red-500/10 transition-colors shrink-0"
+                        title="Rimuovi giocatore"
+                      >
+                        <UserMinus className="w-4 h-4" />
+                      </button>
+                    )}
+                    <span className="font-medium text-slate-200 text-sm truncate">
+                      {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono font-normal">#{player.jersey}</span>}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    {isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID ? (
+                      <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
+                        <button
+                          onClick={() => updatePlayerGoal(teamIndex, player.id, -1)}
+                          className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold active:scale-95 transition-transform"
+                          aria-label={`Rimuovi un gol a ${player.name}`}
+                        >-</button>
+                        <span className="w-6 text-center text-sm font-bold" style={{ color }}>{getDisplayedPlayerGoals(player)}</span>
+                        <button
+                          onClick={() => updatePlayerGoal(teamIndex, player.id, 1)}
+                          className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold active:scale-95 transition-transform"
+                          style={{ backgroundColor: `${color}50` }}
+                          aria-label={`Aggiungi un gol a ${player.name}`}
+                        >+</button>
+                      </div>
+                    ) : (
+                      <div className="font-bold text-lg" style={{ color }}>{getDisplayedPlayerGoals(player)}</div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="animate-in slide-in-from-right-4 duration-300 flex flex-col min-h-[85vh]">
-      
-      <div className="flex justify-between items-center mb-4 w-full">
-        <button 
-          onClick={goBack}
-          className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" /> Indietro
-        </button>
+      <div className="bg-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl border border-slate-700 relative flex-1 flex flex-col">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80 rounded-t-3xl"></div>
 
         <button
           onClick={shareOnWhatsApp}
-          className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-emerald-500 hover:text-white transition-all"
+          className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold hover:bg-emerald-500 hover:text-white transition-all"
         >
-          <Share2 className="w-4 h-4" /> Condividi
+          <Share2 className="w-4 h-4" /> <span>Condividi</span>
         </button>
-      </div>
 
-      <div className="bg-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl border border-slate-700 relative flex-1 flex flex-col">
-        
-        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80 rounded-t-3xl"></div>
-
-        <div className="text-center mb-6 mt-2 relative group/title flex flex-col items-center">
+        <div className="text-center mb-5 mt-5 relative group/title flex flex-col items-center px-1">
           {isAdmin && isEditingTitle ? (
             <input
               autoFocus
@@ -283,15 +648,15 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
               onChange={(e) => setTempTitle(e.target.value)}
               onBlur={handleTitleSave}
               onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
-              className="text-2xl font-bold bg-slate-900 border border-slate-600 rounded text-center text-white px-2 py-1 mb-1 focus:outline-none focus:border-emerald-500 w-full max-w-xs mx-auto"
+              className="text-xl sm:text-2xl font-bold bg-slate-900 border border-slate-600 rounded text-center text-white px-2 py-1 mb-1 focus:outline-none focus:border-emerald-500 w-full max-w-xs mx-auto"
             />
           ) : (
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <h1 className="text-2xl font-bold text-white">{event.title}</h1>
+            <div className="flex items-center justify-center gap-2 mb-1 max-w-full">
+              <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{event.title}</h1>
               {isAdmin && (
                 <button
                   onClick={() => setIsEditingTitle(true)}
-                  className="text-slate-500 hover:text-emerald-400 md:opacity-0 md:group-hover/title:opacity-100 transition-opacity"
+                  className="text-slate-500 hover:text-emerald-400 md:opacity-0 md:group-hover/title:opacity-100 transition-opacity shrink-0"
                   title="Modifica nome evento"
                 >
                   <Edit2 className="w-5 h-5" />
@@ -299,7 +664,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
               )}
             </div>
           )}
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-2 flex-wrap">
             {isLive ? (
               <span className="bg-red-500/20 text-red-400 text-xs font-bold px-2 py-1 rounded border border-red-500/30 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> IN CORSO
@@ -314,261 +679,246 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
           </div>
         </div>
 
-        {/* Tabellone Punteggio */}
-        <div className="w-full space-y-4">
+        {/* Tabellone: nel tab TOT mostra il risultato complessivo, negli altri tab il risultato del singolo tempo. */}
+        <div className="w-full space-y-3">
           <div className="bg-slate-900/60 rounded-2xl p-4 border border-slate-700">
             <div className="flex justify-between items-center">
-              
-              {/* SQUADRA 0 */}
-              <div className="flex flex-col items-center w-2/5">
-                 <button 
+              <div className="flex flex-col items-center w-2/5 min-w-0">
+                <button
                   onClick={() => openTeamModal(0)}
                   disabled={!isAdmin}
                   className={`font-semibold mb-1 text-xs md:text-sm truncate max-w-full flex items-center gap-1.5 group/col transition-all ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
-                  title={isAdmin ? "Clicca per modificare nome e colore" : ""}
-                 >
-                   <span className="w-3 h-3 rounded-full inline-block shadow-sm shrink-0" style={{ backgroundColor: color0 }}></span>
-                   <span style={{ color: color0 }}>{event.teams[0].name}</span>
-                   {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400" />}
-                 </button>
-                 
-                 {isAdmin && isLive && editingScore.teamIndex === 0 ? (
-                   <input
-                     autoFocus
-                     type="number"
-                     value={editingScore.tempScore}
-                     onChange={(e) => setEditingScore({ ...editingScore, tempScore: e.target.value })}
-                     onBlur={() => handleScoreSave(0)}
-                     onKeyDown={(e) => e.key === 'Enter' && handleScoreSave(0)}
-                     className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-6xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
-                   />
-                 ) : (
-                   <div 
-                     onClick={() => isAdmin && isLive && setEditingScore({ teamIndex: 0, tempScore: getTeamScore(event.teams[0]) })}
-                     className={`text-4xl md:text-6xl font-black text-white flex items-center relative group/score ${isAdmin && isLive ? 'cursor-pointer' : ''}`}
-                     title={isAdmin && isLive ? "Modifica punteggio" : ""}
-                   >
-                     {getTeamScore(event.teams[0])}
-                     {isAdmin && isLive && (
-                        <Edit2 className="w-5 h-5 absolute -right-8 text-slate-500 opacity-0 group-hover/score:opacity-100 transition-opacity" />
-                     )}
-                   </div>
-                 )}
+                  title={isAdmin ? 'Clicca per modificare nome e colore' : ''}
+                >
+                  <span className="w-3 h-3 rounded-full inline-block shadow-sm shrink-0" style={{ backgroundColor: color0 }}></span>
+                  <span style={{ color: color0 }} className="truncate">{event.teams[0].name}</span>
+                  {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400 shrink-0" />}
+                </button>
+
+                {isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID && editingScore.teamIndex === 0 ? (
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    value={editingScore.tempScore}
+                    onChange={(e) => setEditingScore({ ...editingScore, tempScore: e.target.value })}
+                    onBlur={() => handleScoreSave(0)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleScoreSave(0)}
+                    className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-6xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
+                  />
+                ) : (
+                  <div
+                    onClick={() => {
+                      if (isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID) {
+                        setEditingScore({ teamIndex: 0, tempScore: String(getDisplayedTeamScore(event.teams[0])) });
+                      }
+                    }}
+                    className={`text-4xl md:text-6xl font-black text-white flex items-center relative group/score ${isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID ? 'cursor-pointer' : ''}`}
+                    title={isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID ? 'Modifica punteggio del tempo' : ''}
+                  >
+                    {getDisplayedTeamScore(event.teams[0])}
+                    {isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID && (
+                      <Edit2 className="w-5 h-5 absolute -right-8 text-slate-500 opacity-0 group-hover/score:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="text-xl font-bold text-slate-500">VS</div>
+              <div className="text-xl font-bold text-slate-500 shrink-0">VS</div>
 
-              {/* SQUADRA 1 */}
-              <div className="flex flex-col items-center w-2/5">
-                 <button 
+              <div className="flex flex-col items-center w-2/5 min-w-0">
+                <button
                   onClick={() => openTeamModal(1)}
                   disabled={!isAdmin}
                   className={`font-semibold mb-1 text-xs md:text-sm truncate max-w-full flex items-center gap-1.5 group/col transition-all ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
-                  title={isAdmin ? "Clicca per modificare nome e colore" : ""}
-                 >
-                   <span className="w-3 h-3 rounded-full inline-block shadow-sm shrink-0" style={{ backgroundColor: color1 }}></span>
-                   <span style={{ color: color1 }}>{event.teams[1].name}</span>
-                   {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400" />}
-                 </button>
+                  title={isAdmin ? 'Clicca per modificare nome e colore' : ''}
+                >
+                  <span className="w-3 h-3 rounded-full inline-block shadow-sm shrink-0" style={{ backgroundColor: color1 }}></span>
+                  <span style={{ color: color1 }} className="truncate">{event.teams[1].name}</span>
+                  {isAdmin && <Palette className="w-3 h-3 opacity-0 group-hover/col:opacity-100 transition-opacity text-slate-400 shrink-0" />}
+                </button>
 
-                 {isAdmin && isLive && editingScore.teamIndex === 1 ? (
-                   <input
-                     autoFocus
-                     type="number"
-                     value={editingScore.tempScore}
-                     onChange={(e) => setEditingScore({ ...editingScore, tempScore: e.target.value })}
-                     onBlur={() => handleScoreSave(1)}
-                     onKeyDown={(e) => e.key === 'Enter' && handleScoreSave(1)}
-                     className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-6xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
-                   />
-                 ) : (
-                   <div 
-                     onClick={() => isAdmin && isLive && setEditingScore({ teamIndex: 1, tempScore: getTeamScore(event.teams[1]) })}
-                     className={`text-4xl md:text-6xl font-black text-white flex items-center relative group/score ${isAdmin && isLive ? 'cursor-pointer' : ''}`}
-                     title={isAdmin && isLive ? "Modifica punteggio" : ""}
-                   >
-                     {getTeamScore(event.teams[1])}
-                     {isAdmin && isLive && (
-                        <Edit2 className="w-5 h-5 absolute -right-8 text-slate-500 opacity-0 group-hover/score:opacity-100 transition-opacity" />
-                     )}
-                   </div>
-                 )}
+                {isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID && editingScore.teamIndex === 1 ? (
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    value={editingScore.tempScore}
+                    onChange={(e) => setEditingScore({ ...editingScore, tempScore: e.target.value })}
+                    onBlur={() => handleScoreSave(1)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleScoreSave(1)}
+                    className="w-20 bg-slate-900 border border-slate-600 rounded text-center text-4xl md:text-6xl font-black text-white py-1 focus:outline-none focus:border-emerald-500 mx-auto"
+                  />
+                ) : (
+                  <div
+                    onClick={() => {
+                      if (isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID) {
+                        setEditingScore({ teamIndex: 1, tempScore: String(getDisplayedTeamScore(event.teams[1])) });
+                      }
+                    }}
+                    className={`text-4xl md:text-6xl font-black text-white flex items-center relative group/score ${isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID ? 'cursor-pointer' : ''}`}
+                    title={isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID ? 'Modifica punteggio del tempo' : ''}
+                  >
+                    {getDisplayedTeamScore(event.teams[1])}
+                    {isAdmin && isLive && selectedPeriodId !== TOTAL_PERIOD_ID && (
+                      <Edit2 className="w-5 h-5 absolute -right-8 text-slate-500 opacity-0 group-hover/score:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+                )}
               </div>
-
             </div>
           </div>
 
-          {/* LISTA FORMAZIONI */}
+          {/* Tempi della partita */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin" role="tablist" aria-label="Tempi della partita">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedPeriodId === TOTAL_PERIOD_ID}
+                onClick={() => {
+                  setSelectedPeriodId(TOTAL_PERIOD_ID);
+                  setIsEditingPeriodName(false);
+                  setEditingScore({ teamIndex: null, tempScore: '' });
+                }}
+                className={`shrink-0 min-w-[58px] px-3 py-2 rounded-md text-xs font-bold border transition-all ${
+                  selectedPeriodId === TOTAL_PERIOD_ID
+                    ? 'bg-white text-slate-950 border-emerald-400 ring-2 ring-emerald-500/40'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-white'
+                }`}
+              >
+                TOT
+              </button>
+
+              {periods.map(period => (
+                <button
+                  type="button"
+                  role="tab"
+                  key={period.id}
+                  aria-selected={selectedPeriodId === period.id}
+                  onClick={() => {
+                    setSelectedPeriodId(period.id);
+                    setIsEditingPeriodName(false);
+                    setEditingScore({ teamIndex: null, tempScore: '' });
+                  }}
+                  className={`shrink-0 min-w-[42px] px-4 py-2 rounded-md text-xs font-bold border transition-all ${
+                    selectedPeriodId === period.id
+                      ? 'bg-white text-slate-950 border-emerald-400 ring-2 ring-emerald-500/40'
+                      : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  {period.name}
+                </button>
+              ))}
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleAddPeriod}
+                  className="shrink-0 w-10 h-9 flex items-center justify-center rounded-md bg-slate-700 border border-slate-600 text-white hover:bg-emerald-600 hover:border-emerald-500 transition-colors"
+                  title="Aggiungi un tempo"
+                  aria-label="Aggiungi un tempo"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="min-h-8 flex items-center gap-3 px-1">
+              {isAdmin && selectedPeriod && (
+                <>
+                  {isEditingPeriodName ? (
+                    <form onSubmit={savePeriodName} className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={draftPeriodName}
+                        onChange={(e) => setDraftPeriodName(e.target.value)}
+                        maxLength={32}
+                        className="w-32 bg-slate-900 border border-slate-600 rounded-md px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        aria-label="Nome del tempo"
+                      />
+                      <button type="submit" className="text-emerald-400 hover:text-emerald-300 p-1" title="Salva nome">
+                        <Save className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => setIsEditingPeriodName(false)} className="text-slate-500 hover:text-white p-1" title="Annulla">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startEditingPeriodName}
+                      className="text-slate-400 hover:text-emerald-400 p-1 transition-colors"
+                      title="Rinomina il tempo"
+                      aria-label="Rinomina il tempo"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={openDeletePeriodModal}
+                    className="text-slate-500 hover:text-red-400 p-1 transition-colors"
+                    title="Elimina questo tempo"
+                    aria-label="Elimina questo tempo"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+
+              {selectedPeriodId === TOTAL_PERIOD_ID && (
+                <span className="text-[11px] text-slate-500">
+                  Totale complessivo. Seleziona un tempo per registrare o correggere i gol.
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Lista giocatori condivisa tra tutti i tempi */}
           <div className="space-y-4 transition-all">
-            {/* Blocco Squadra 0 */}
-            <div className="bg-slate-900/40 rounded-xl border overflow-hidden shadow-md" style={{ borderColor: `${color0}33` }}>
-              <div 
-                onClick={() => setShowTeam0Players(!showTeam0Players)}
-                className="px-4 py-2.5 font-bold text-xs tracking-wider flex justify-between items-center cursor-pointer transition-colors hover:bg-white/5"
-                style={{ backgroundColor: `${color0}15`, color: color0 }}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color0 }}></span>
-                  <span>{event.teams[0].name.toUpperCase()} ({event.teams[0].players?.length || 0})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isAdmin && isLive && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); openAddPlayerModal(0); }} 
-                      className="text-xs bg-black/30 hover:bg-black/50 px-2 py-1 rounded text-white flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" /> Aggiungi
-                    </button>
-                  )}
-                  <span className="text-slate-400 text-xs flex items-center gap-1">
-                    {showTeam0Players ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </span>
-                </div>
-              </div>
-
-              {showTeam0Players && (
-                <div className="divide-y divide-slate-700/50 px-4 transition-all">
-                  {(!event.teams[0].players || event.teams[0].players.length === 0) ? (
-                    <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
-                  ) : (
-                    getSortedPlayers(event.teams[0].players).map(player => (
-                      <div key={player.id} className="flex justify-between items-center py-3">
-                        <div className="flex items-center gap-2">
-                          {isAdmin && isLive && (
-                            <button 
-                              onClick={() => promptRemovePlayer(0, player)}
-                              className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg bg-slate-950/40 hover:bg-red-500/10 transition-colors"
-                              title="Rimuovi giocatore"
-                            >
-                              <UserMinus className="w-4 h-4" />
-                            </button>
-                          )}
-                          <span className="font-medium text-slate-200 text-sm">
-                            {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono">#{player.jersey}</span>}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {isAdmin && isLive ? (
-                            <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
-                              <button 
-                                onClick={() => updatePlayerGoal(0, player.id, -1)}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold active:scale-95 transition-transform"
-                              >-</button>
-                              <span className="w-6 text-center text-sm font-bold" style={{ color: color0 }}>{player.goals}</span>
-                              <button 
-                                onClick={() => updatePlayerGoal(0, player.id, 1)}
-                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold active:scale-95 transition-transform"
-                                style={{ backgroundColor: `${color0}50` }}
-                              >+</button>
-                            </div>
-                          ) : (
-                            <div className="font-bold text-lg" style={{ color: color0 }}>{player.goals}</div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Blocco Squadra 1 */}
-            <div className="bg-slate-900/40 rounded-xl border overflow-hidden shadow-md" style={{ borderColor: `${color1}33` }}>
-              <div 
-                onClick={() => setShowTeam1Players(!showTeam1Players)}
-                className="px-4 py-2.5 font-bold text-xs tracking-wider flex justify-between items-center cursor-pointer transition-colors hover:bg-white/5"
-                style={{ backgroundColor: `${color1}15`, color: color1 }}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color1 }}></span>
-                  <span>{event.teams[1].name.toUpperCase()} ({event.teams[1].players?.length || 0})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isAdmin && isLive && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); openAddPlayerModal(1); }} 
-                      className="text-xs bg-black/30 hover:bg-black/50 px-2 py-1 rounded text-white flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" /> Aggiungi
-                    </button>
-                  )}
-                  <span className="text-slate-400 text-xs flex items-center gap-1">
-                    {showTeam1Players ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </span>
-                </div>
-              </div>
-
-              {showTeam1Players && (
-                <div className="divide-y divide-slate-700/50 px-4 transition-all">
-                  {(!event.teams[1].players || event.teams[1].players.length === 0) ? (
-                    <div className="py-3 text-xs text-slate-500 italic text-center">Nessun giocatore</div>
-                  ) : (
-                    getSortedPlayers(event.teams[1].players).map(player => (
-                      <div key={player.id} className="flex justify-between items-center py-3">
-                        <div className="flex items-center gap-2">
-                          {isAdmin && isLive && (
-                            <button 
-                              onClick={() => promptRemovePlayer(1, player)}
-                              className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg bg-slate-950/40 hover:bg-red-500/10 transition-colors"
-                              title="Rimuovi giocatore"
-                            >
-                              <UserMinus className="w-4 h-4" />
-                            </button>
-                          )}
-                          <span className="font-medium text-slate-200 text-sm">
-                            {player.name} {player.jersey && <span className="text-slate-500 text-xs ml-1 font-mono font-normal">#{player.jersey}</span>}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {isAdmin && isLive ? (
-                            <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-0.5 border border-slate-800">
-                              <button 
-                                onClick={() => updatePlayerGoal(1, player.id, -1)}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-bold active:scale-95 transition-transform"
-                              >-</button>
-                              <span className="w-6 text-center text-sm font-bold" style={{ color: color1 }}>{player.goals}</span>
-                              <button 
-                                onClick={() => updatePlayerGoal(1, player.id, 1)}
-                                className="w-7 h-7 flex items-center justify-center rounded text-white text-sm font-bold active:scale-95 transition-transform"
-                                style={{ backgroundColor: `${color1}50` }}
-                              >+</button>
-                            </div>
-                          ) : (
-                            <div className="font-bold text-lg" style={{ color: color1 }}>{player.goals}</div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+            {renderTeamPlayers(0, showTeam0Players, setShowTeam0Players, color0)}
+            {renderTeamPlayers(1, showTeam1Players, setShowTeam1Players, color1)}
           </div>
         </div>
+      </div>
 
+      {/* Pulsante reazioni: la griglia compare nella modale, non più in fondo alla pagina. */}
+      <div className="mt-3 flex items-center">
+        <button
+          type="button"
+          onClick={() => setShowEmojiModal(true)}
+          className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors"
+          title="Apri reazioni emoji"
+          aria-label="Apri reazioni emoji"
+        >
+          <Smile className="w-6 h-6" />
+        </button>
       </div>
 
       {(event.timeline && event.timeline.length > 0) && (
-        <div className="mt-6 bg-slate-800/80 rounded-xl p-4 border border-slate-700 max-h-48 overflow-y-auto">
+        <div className="mt-3 bg-slate-800/80 rounded-xl p-4 border border-slate-700 max-h-48 overflow-y-auto">
           <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-3">
             <Clock className="w-4 h-4" /> Cronologia Eventi
           </h3>
           <div className="space-y-2">
-            {event.timeline.map((log) => {
+            {event.timeline.map(log => {
               const renderGoalLog = () => {
                 const template = log.customTemplate;
                 if (template) {
                   const parts = template.split('<giocatore>');
                   return (
                     <span>
-                      {parts.map((part, i) => (
-                        <React.Fragment key={i}>
+                      {parts.map((part, index) => (
+                        <React.Fragment key={index}>
                           {part}
-                          {i < parts.length - 1 && (
+                          {index < parts.length - 1 && (
                             <span className="font-bold text-white">{log.playerName}</span>
                           )}
                         </React.Fragment>
                       ))} ⚽
+                      {log.periodName && <span className="text-slate-500 text-xs"> ({log.periodName})</span>}
                     </span>
                   );
                 }
@@ -577,21 +927,24 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
                   const parts = log.customMessage.split(log.playerName);
                   return (
                     <span>
-                      {parts.map((part, i) => (
-                        <React.Fragment key={i}>
+                      {parts.map((part, index) => (
+                        <React.Fragment key={index}>
                           {part}
-                          {i < parts.length - 1 && (
+                          {index < parts.length - 1 && (
                             <span className="font-bold text-white">{log.playerName}</span>
                           )}
                         </React.Fragment>
                       ))} ⚽
+                      {log.periodName && <span className="text-slate-500 text-xs"> ({log.periodName})</span>}
                     </span>
                   );
                 }
 
                 return (
                   <span>
-                    <span className="font-bold text-white">{log.playerName}</span> ha segnato per <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽
+                    <span className="font-bold text-white">{log.playerName}</span> ha segnato per{' '}
+                    <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽
+                    {log.periodName && <span className="text-slate-500 text-xs"> ({log.periodName})</span>}
                   </span>
                 );
               };
@@ -603,13 +956,16 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
                     {log.type === 'end' && <span>🏁 Finisce qui la partita! Col risultato di <span className="font-bold text-white">{log.scoreString}</span></span>}
                     {(!log.type || log.type === 'goal') && renderGoalLog()}
                     {log.type === 'undo' && (
-                      <span>❌ A <span className="font-bold text-white">{log.playerName}</span> è stato annullato il goal</span>
+                      <span>
+                        ❌ A <span className="font-bold text-white">{log.playerName}</span> è stato annullato il gol
+                        {log.periodName && <span className="text-slate-500 text-xs"> ({log.periodName})</span>}
+                      </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className="text-slate-500 font-mono text-xs">{log.time}</span>
                     {isAdmin && (
-                      <button 
+                      <button
                         onClick={() => deleteLog(log.id)}
                         className="text-slate-600 hover:text-red-400 transition-colors md:opacity-0 md:group-hover:opacity-100"
                         title="Elimina log"
@@ -629,18 +985,18 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         <div className={`mt-4 rounded-xl p-4 flex justify-between items-center border shadow-lg ${isLive ? 'bg-slate-800/80 border-red-500/20' : 'bg-slate-800/80 border-emerald-500/20'}`}>
           <div className="text-sm">
             <span className="font-bold text-white block">Opzioni Admin</span>
-            <span className="text-slate-400">{isLive ? "Chiudi quando finito" : "Correzioni necessarie?"}</span>
+            <span className="text-slate-400">{isLive ? 'Chiudi quando finito' : 'Correzioni necessarie?'}</span>
           </div>
-          
+
           {isLive ? (
-            <button 
+            <button
               onClick={() => setMatchStatus('ended')}
               className="bg-red-500/20 text-red-400 border border-red-500/30 px-4 py-2 rounded-lg font-bold hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
             >
               <Check className="w-4 h-4" /> Termina Partita
             </button>
           ) : (
-            <button 
+            <button
               onClick={() => setMatchStatus('live')}
               className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-4 py-2 rounded-lg font-bold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2"
             >
@@ -650,22 +1006,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         </div>
       )}
 
-      <div className="mt-8 mb-4">
-        <h3 className="text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Reazioni Pubblico</h3>
-        <div className="grid grid-cols-4 gap-3 md:gap-4 justify-items-center max-w-sm mx-auto">
-          {EMOJI_LIST.map((emoji, idx) => (
-             <ReactionButton 
-                key={emoji} 
-                emoji={emoji} 
-                index={idx}
-                count={event.reactions?.[emoji] || 0} 
-                onClick={() => addEmojiReaction(event.id, emoji)} 
-             />
-          ))}
-        </div>
-      </div>
-
-      <AddPlayerModal 
+      <AddPlayerModal
         isOpen={playerModal.isOpen}
         onClose={() => setPlayerModal({ isOpen: false, teamIndex: null })}
         onConfirm={confirmAddPlayer}
@@ -675,7 +1016,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         setNewPlayerJersey={setNewPlayerJersey}
       />
 
-      <EditTeamModal 
+      <EditTeamModal
         isOpen={teamModal.isOpen}
         onClose={() => setTeamModal({ isOpen: false, teamIndex: null, name: '', color: '' })}
         teamModal={teamModal}
@@ -683,13 +1024,137 @@ const EventView = memo(function EventView({ event: initialEvent, user, goBack })
         onSave={handleSaveTeamDetails}
       />
 
-      <DeletePlayerModal 
+      <DeletePlayerModal
         isOpen={deleteConfirmModal.isOpen}
         onClose={() => setDeleteConfirmModal({ isOpen: false, teamIndex: null, playerId: null, playerName: '' })}
         playerName={deleteConfirmModal.playerName}
         onConfirm={executeRemovePlayer}
       />
 
+      {showEmojiModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={() => setShowEmojiModal(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Smile className="w-5 h-5 text-emerald-400" /> Reazioni pubblico
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEmojiModal(false)}
+                className="text-slate-500 hover:text-white"
+                aria-label="Chiudi"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-3 justify-items-center">
+              {EMOJI_LIST.map((emoji, index) => (
+                <ReactionButton
+                  key={emoji}
+                  emoji={emoji}
+                  index={index}
+                  count={event.reactions?.[emoji] || 0}
+                  animateOnCountChange={false}
+                  onClick={() => {
+                    addEmojiReaction(event.id, emoji).catch(error => {
+                      console.warn('Impossibile registrare la reazione:', error);
+                    });
+                    setShowEmojiModal(false);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mantiene attiva l'animazione anche dopo che la modale emoji è stata chiusa. */}
+      {EMOJI_LIST.map((emoji, index) => (
+        <ReactionBurst
+          key={emoji}
+          emoji={emoji}
+          index={index}
+          count={event.reactions?.[emoji] || 0}
+        />
+      ))}
+
+      {isDeletePeriodModalOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={closeDeletePeriodModal}
+        >
+          <div
+            className="bg-slate-800 border border-slate-700 rounded-3xl p-6 w-full max-w-sm shadow-2xl relative text-center"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={closeDeletePeriodModal}
+              disabled={isDeletingPeriod}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors disabled:opacity-40"
+              aria-label="Chiudi"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-14 h-14 bg-red-500/10 text-red-400 border border-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-7 h-7" />
+            </div>
+
+            <h3 className="text-xl font-bold text-white mb-1">Elimina tempo</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Stai per eliminare <span className="font-bold text-slate-200">“{selectedPeriod?.name}”</span> e tutti i gol associati.
+              Inserisci la password admin per confermare.
+            </p>
+
+            <form onSubmit={confirmDeletePeriod} className="space-y-4">
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                <input
+                  type="password"
+                  value={periodDeletePassword}
+                  onChange={e => {
+                    setPeriodDeletePassword(e.target.value);
+                    setPeriodDeleteError('');
+                  }}
+                  placeholder="Password di sistema"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-center text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              {periodDeleteError && (
+                <p className="text-red-400 text-xs font-semibold animate-in fade-in">{periodDeleteError}</p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeDeletePeriodModal}
+                  disabled={isDeletingPeriod}
+                  className="flex-1 py-2.5 bg-slate-700/60 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeletingPeriod || !periodDeletePassword.trim()}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-600/25 transition-all disabled:opacity-50"
+                >
+                  {isDeletingPeriod ? 'Eliminazione...' : 'Elimina'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
