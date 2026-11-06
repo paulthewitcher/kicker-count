@@ -67,3 +67,26 @@ Il documento Firestore della partita usa questa struttura per i tempi:
 Le reazioni sono disponibili dalla nuova icona sopra la cronologia. La scelta avviene in una modale; dopo la selezione la modale si chiude e l'animazione della reazione viene mostrata indipendentemente dalla sua chiusura.
 
 > Nota dipendenze: l'archivio ricevuto conteneva un `package-lock.json` riferito a versioni diverse da quelle dichiarate in `package.json` (React/Vite). È stato rimosso per evitare installazioni non riproducibili; `npm install` genererà un lockfile coerente.
+
+## Permessi amministratore e password di eliminazione
+
+- Nella bacheca il cestino di un evento viene mostrato solo quando `event.adminId` coincide con l'UID Firebase dell'utente corrente. Anche l'apertura della modale e l'handler di conferma ripetono il controllo.
+- La cancellazione dell'intera partita e quella di un singolo tempo leggono entrambe `deletePassword` dal documento Firestore dell'evento (con fallback al campo `seed` per i documenti più vecchi). Per cambiare la password di una partita esistente, modifica il campo `deletePassword` nel relativo documento. La modifica vale solo per quella partita.
+- Le nuove partite continuano inizialmente a usare il Seed come valore di `deletePassword`, finché non viene personalizzato il campo sul documento.
+
+**Importante per la sicurezza:** nascondere il pulsante e verificare la password nel client non sostituisce le Firestore Security Rules. Il progetto non includeva un file di regole Firebase, quindi occorre integrare nel ruleset già pubblicato una regola che consenta `delete` solo al proprietario registrato nel documento e gli aggiornamenti completi solo all'amministratore (mantenendo per gli spettatori il solo aggiornamento di `reactions`). Esempio del blocco da adattare al ruleset esistente:
+
+```text
+match /artifacts/{appId}/public/data/events/{eventId} {
+  allow read: if request.auth != null;
+  allow create: if request.auth != null
+                && request.resource.data.adminId == request.auth.uid;
+  allow delete: if request.auth != null
+                && resource.data.adminId == request.auth.uid;
+  allow update: if request.auth != null
+                && (resource.data.adminId == request.auth.uid
+                    || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
+}
+```
+
+Il campo `deletePassword` si trova nel documento dell'evento e, se le regole permettono a tutti gli utenti autenticati di leggere l'evento, non è un segreto: la vera autorizzazione alla cancellazione deve quindi essere imposta dalle Security Rules sopra, non affidata alla sola password lato browser.

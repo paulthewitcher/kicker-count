@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Plus, History } from 'lucide-react';
 import EventCard from '../components/EventCard';
 
-const DashboardView = memo(function DashboardView({ events, seed, goToCreate, openEvent, onRequestDelete }) {
+const DashboardView = memo(function DashboardView({ events, seed, user, goToCreate, openEvent, onRequestDelete }) {
   const liveEvents = events.filter(e => e.status === 'live');
   const pastEvents = events.filter(e => e.status === 'ended');
 
@@ -45,6 +45,7 @@ const DashboardView = memo(function DashboardView({ events, seed, goToCreate, op
                   event={event} 
                   onClick={() => openEvent(event.id)} 
                   onDeleteClick={onRequestDelete}
+                  canDelete={Boolean(user?.uid && event.adminId === user.uid)}
                 />
               ))}
             </div>
@@ -63,6 +64,7 @@ const DashboardView = memo(function DashboardView({ events, seed, goToCreate, op
                   event={event} 
                   onClick={() => openEvent(event.id)} 
                   onDeleteClick={onRequestDelete}
+                  canDelete={Boolean(user?.uid && event.adminId === user.uid)}
                 />
               ))}
             </div>

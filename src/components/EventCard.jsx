@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Trash2, Clock } from 'lucide-react';
 import { getTeamScore, formatTimestamp } from '../utils/helpers';
 
-const EventCard = memo(function EventCard({ event, onClick, onDeleteClick, canDelete = true }) {
+const EventCard = memo(function EventCard({ event, onClick, onDeleteClick, canDelete = false }) {
   const isLive = event.status === 'live';
 
   return (

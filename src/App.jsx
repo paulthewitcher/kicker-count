@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './services/firebase';
-import { subscribeToEvents, deleteEvent } from './services/eventService';
+import { subscribeToEvents, deleteEventWithPassword } from './services/eventService';
 import Header from './components/Header';
 import LogoutModal from './components/modals/LogoutModal';
 import EditSeedModal from './components/modals/EditSeedModal';
@@ -97,15 +97,21 @@ export default function App() {
     }
   };
 
-  const handleDeleteConfirmed = async () => {
-    if (deleteEventModal.event) {
-      await deleteEvent(deleteEventModal.event.id);
-      if (currentEventId === deleteEventModal.event.id) {
-        setCurrentEventId(null);
-        setView('DASHBOARD');
-      }
-      setDeleteEventModal({ isOpen: false, event: null });
+  const handleDeleteConfirmed = async (password) => {
+    const targetEvent = deleteEventModal.event;
+
+    // Second check: do not rely only on hiding the button in the UI.
+    if (!targetEvent || !user?.uid || targetEvent.adminId !== user.uid) {
+      throw new Error('Solo l’amministratore di questa partita può eliminarla.');
     }
+
+    await deleteEventWithPassword(targetEvent.id, password);
+
+    if (currentEventId === targetEvent.id) {
+      setCurrentEventId(null);
+      setView('DASHBOARD');
+    }
+    setDeleteEventModal({ isOpen: false, event: null });
   };
 
   const currentEvent = events.find(e => e.id === currentEventId);
@@ -145,12 +151,17 @@ export default function App() {
           <DashboardView 
             events={events} 
             seed={seed}
+            user={user}
             goToCreate={() => setView('CREATE')} 
             openEvent={(id) => {
               setCurrentEventId(id);
               setView('EVENT');
             }}
-            onRequestDelete={(event) => setDeleteEventModal({ isOpen: true, event })}
+            onRequestDelete={(event) => {
+              if (user?.uid && event?.adminId === user.uid) {
+                setDeleteEventModal({ isOpen: true, event });
+              }
+            }}
           />
         )}
 
@@ -206,7 +217,6 @@ export default function App() {
       <DeleteEventModal
         isOpen={deleteEventModal.isOpen}
         eventTitle={deleteEventModal.event?.title || ''}
-        systemPassword="opera2019"
         onClose={() => setDeleteEventModal({ isOpen: false, event: null })}
         onConfirm={handleDeleteConfirmed}
       />
