@@ -4,7 +4,7 @@ import {
   Clock, Trash2, Check, RotateCcw, Smile, X, Lock, Pencil,
   Save
 } from 'lucide-react';
-import { EMOJI_LIST, OPERA_GOAL_TEMPLATES } from '../utils/constants';
+import { EMOJI_LIST, OPERA_GOAL_TEMPLATES, getTeamColorEmoji } from '../utils/constants';
 import {
   getSortedPlayers,
   getEventPeriods,
@@ -438,11 +438,14 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     const teamB = messageEvent.teams[1];
 
     let text = `🏆 *${event.title}*\n\n`;
-    text += `🔴 *${teamA.name}* ${getTeamTotalScore(teamA, currentPeriods)} - ${getTeamTotalScore(teamB, currentPeriods)} *${teamB.name}* 🔵\n\n`;
+    const teamAIcon = getTeamColorEmoji(teamA.color || '#ef4444');
+    const teamBIcon = getTeamColorEmoji(teamB.color || '#174195');
+
+    text += `${teamAIcon} *${teamA.name}* ${getTeamTotalScore(teamA, currentPeriods)} - ${getTeamTotalScore(teamB, currentPeriods)} *${teamB.name}* ${teamBIcon}\n\n`;
     text += `⚽ *Marcatori - Totale partita:*\n`;
 
-    const appendScorers = (team, teamIndex, getGoals) => {
-      const icon = teamIndex === 0 ? '🔴' : '🔵';
+    const appendScorers = (team, getGoals, fallbackIcon) => {
+      const icon = getTeamColorEmoji(team.color, fallbackIcon);
       const scorers = getSortedPlayers(team.players, getGoals).filter(player => getGoals(player) > 0);
 
       text += `${icon} *${team.name}:*\n`;
@@ -456,8 +459,8 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
       }
     };
 
-    appendScorers(teamA, 0, player => getPlayerTotalGoals(player, currentPeriods));
-    appendScorers(teamB, 1, player => getPlayerTotalGoals(player, currentPeriods));
+    appendScorers(teamA, player => getPlayerTotalGoals(player, currentPeriods), '🔴');
+    appendScorers(teamB, player => getPlayerTotalGoals(player, currentPeriods), '🔵');
 
     currentPeriods.forEach(period => {
       const periodName = getPeriodShareName(period);
@@ -465,10 +468,10 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
       const scoreB = getTeamScoreForPeriod(teamB, period.id, currentPeriods);
 
       text += `\n⏱ *${periodName}*\n`;
-      text += `🔴 *${teamA.name}* ${scoreA} - ${scoreB} *${teamB.name}* 🔵\n\n`;
+      text += `${teamAIcon} *${teamA.name}* ${scoreA} - ${scoreB} *${teamB.name}* ${teamBIcon}\n\n`;
       text += '⚽ *Marcatori:*\n';
-      appendScorers(teamA, 0, player => getPlayerGoalsInPeriod(player, period.id, currentPeriods));
-      appendScorers(teamB, 1, player => getPlayerGoalsInPeriod(player, period.id, currentPeriods));
+      appendScorers(teamA, player => getPlayerGoalsInPeriod(player, period.id, currentPeriods), '🔴');
+      appendScorers(teamB, player => getPlayerGoalsInPeriod(player, period.id, currentPeriods), '🔵');
     });
 
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
