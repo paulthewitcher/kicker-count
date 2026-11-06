@@ -74,3 +74,13 @@ Le reazioni sono disponibili dalla nuova icona sopra la cronologia. La scelta av
 - La modale chiede una conferma. Il valore digitato viene confrontato nel client con il `seed` della partita, già presente nei dati dell'evento. Il valore digitato **non viene inviato** a Firestore, non viene salvato e non viene scritto in alcun campo.
 - Le nuove partite non creano più il campo duplicato `deletePassword`: il codice usa esclusivamente `seed` per il confronto locale. Nei documenti storici il vecchio campo `deletePassword`, se presente, viene ignorato e non viene più letto né aggiornato. Non viene eseguita alcuna migrazione automatica dei dati.
 - Questa conferma è una protezione contro eliminazioni accidentali, non un'autorizzazione server-side: senza modificare le regole Firestore o introdurre un endpoint server, l'autorizzazione effettiva delle operazioni dipende dalle Security Rules già attive nel progetto Firebase. Non è richiesta alcuna Cloud Function, Secret Manager, attivazione Blaze o modifica di configurazione Firebase per questa versione.
+
+## Deploy Vercel – correzione dipendenze Rollup
+
+Nel repository GitHub il `package-lock.json` presente al commit `ea4b5bf` non era
+coerente con `package.json` (lockfile: Firebase 13 / React 19 / Vite 8;
+manifest: Firebase 10 / React 18 / Vite 5). Questa versione non include il vecchio
+lockfile e contiene `.npmrc` con `include=optional`, necessario per preservare i
+pacchetti binari opzionali di Rollup. Dopo aver copiato i file nel repository,
+assicurati di eliminare anche da GitHub il vecchio `package-lock.json` e fai un
+redeploy Vercel senza cache. Istruzioni in `VERCEL_BUILD_FIX.md`.
