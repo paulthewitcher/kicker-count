@@ -264,6 +264,11 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword,
   }
 
   const updatedPeriods = periods.filter(period => period.id !== periodId);
+  const numericPeriodIds = new Set(
+    updatedPeriods
+      .filter(period => /^\d+$/.test(String(period?.name ?? '').trim()))
+      .map(period => period.id)
+  );
   const teams = (data.teams || []).map(team => {
     const players = (team.players || []).map(player => {
       const goalsByPeriod = player.goalsByPeriod
@@ -273,8 +278,8 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword,
 
       delete goalsByPeriod[periodId];
 
-      const goals = Object.values(goalsByPeriod).reduce(
-        (total, value) => total + (Number(value) || 0),
+      const goals = [...numericPeriodIds].reduce(
+        (total, numericPeriodId) => total + (Number(goalsByPeriod[numericPeriodId]) || 0),
         0
       );
 
@@ -287,8 +292,8 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword,
 
     delete scoreOffsetsByPeriod[periodId];
 
-    const scoreOffset = Object.values(scoreOffsetsByPeriod).reduce(
-      (total, value) => total + (Number(value) || 0),
+    const scoreOffset = [...numericPeriodIds].reduce(
+      (total, numericPeriodId) => total + (Number(scoreOffsetsByPeriod[numericPeriodId]) || 0),
       0
     );
 

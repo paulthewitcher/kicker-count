@@ -8,6 +8,7 @@ import { EMOJI_LIST, OPERA_GOAL_TEMPLATES, getTeamColorEmoji } from '../utils/co
 import {
   getSortedPlayers,
   getEventPeriods,
+  getNumericPeriods,
   getPlayerGoalsInPeriod,
   getPlayerTotalGoals,
   getTeamScoreForPeriod,
@@ -29,6 +30,7 @@ const TOTAL_PERIOD_ID = 'total';
 
 const normalizeMatchPeriods = (sourceEvent) => {
   const periods = getEventPeriods(sourceEvent);
+  const numericPeriods = getNumericPeriods(periods);
   const firstPeriodId = periods[0]?.id || 'period-1';
 
   const teams = (sourceEvent.teams || []).map(team => {
@@ -41,7 +43,7 @@ const normalizeMatchPeriods = (sourceEvent) => {
         ? { ...player.goalsByPeriod }
         : (periods.length ? { [firstPeriodId]: Number(player.goals) || 0 } : {});
 
-      const goals = periods.reduce(
+      const goals = numericPeriods.reduce(
         (total, period) => total + (Number(goalsByPeriod[period.id]) || 0),
         0
       );
@@ -49,8 +51,8 @@ const normalizeMatchPeriods = (sourceEvent) => {
       return { ...player, goalsByPeriod, goals, goalHistory: Array.isArray(player.goalHistory) ? [...player.goalHistory] : [] };
     });
 
-    const scoreOffset = Object.values(scoreOffsetsByPeriod).reduce(
-      (total, value) => total + (Number(value) || 0),
+    const scoreOffset = numericPeriods.reduce(
+      (total, period) => total + (Number(scoreOffsetsByPeriod[period.id]) || 0),
       0
     );
 
@@ -246,7 +248,10 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     };
 
     team.scoreOffsetsByPeriod = offsets;
-    team.scoreOffset = Object.values(offsets).reduce((total, value) => total + (Number(value) || 0), 0);
+    team.scoreOffset = getNumericPeriods(normalized.periods).reduce(
+      (total, period) => total + (Number(offsets[period.id]) || 0),
+      0
+    );
 
     updateEventData(event.id, {
       periods: normalized.periods,
@@ -540,10 +545,18 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         ? { ...period, name: draftPeriodName.trim() }
         : period
     ));
+    const normalizedAfterRename = normalizeMatchPeriods({ ...event, periods: updatedPeriods });
 
     try {
-      await updateEventData(event.id, { periods: updatedPeriods });
-      setEvent(previous => ({ ...previous, periods: updatedPeriods }));
+      await updateEventData(event.id, {
+        periods: updatedPeriods,
+        teams: normalizedAfterRename.teams
+      });
+      setEvent(previous => ({
+        ...previous,
+        periods: updatedPeriods,
+        teams: normalizedAfterRename.teams
+      }));
       setIsEditingPeriodName(false);
     } catch (error) {
       console.error('Impossibile rinominare il tempo:', error);
@@ -838,8 +851,8 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                 }}
                 className={`shrink-0 min-w-[58px] px-3 py-2 rounded-md text-xs font-bold border transition-all ${
                   selectedPeriodId === TOTAL_PERIOD_ID
-                    ? 'bg-[#feed00] text-slate-950 border-[#feed00] ring-2 ring-[#feed00]/30'
-                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-white'
+                    ? 'bg-emerald-500 text-white border-emerald-500 ring-2 ring-emerald-500/30'
+                    : 'bg-slate-700 text-white border-slate-600 hover:bg-slate-600'
                 }`}
               >
                 TOT
@@ -858,8 +871,8 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   }}
                   className={`shrink-0 min-w-[42px] px-4 py-2 rounded-md text-xs font-bold border transition-all ${
                     selectedPeriodId === period.id
-                      ? 'bg-[#feed00] text-slate-950 border-[#feed00] ring-2 ring-[#feed00]/30'
-                      : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-white'
+                      ? 'bg-emerald-500 text-white border-emerald-500 ring-2 ring-emerald-500/30'
+                      : 'bg-slate-700 text-white border-slate-600 hover:bg-slate-600'
                   }`}
                 >
                   {period.name}

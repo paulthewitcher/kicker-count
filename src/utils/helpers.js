@@ -3,6 +3,12 @@ export const getEventPeriods = (event) => {
   return [{ id: 'period-1', name: '1', number: 1 }];
 };
 
+// Solo i tempi con nome interamente numerico partecipano al totale partita.
+// Esempi inclusi: 1, 2, 3. Esempi esclusi: Rigori, Extra time, Supplementari.
+export const isNumericPeriod = (period) => /^\d+$/.test(String(period?.name ?? '').trim());
+
+export const getNumericPeriods = (periods = []) => (periods || []).filter(isNumericPeriod);
+
 export const getPlayerGoalsInPeriod = (player, periodId, periods = []) => {
   const goalsByPeriod = player?.goalsByPeriod;
 
@@ -19,14 +25,18 @@ export const getPlayerGoalsInPeriod = (player, periodId, periods = []) => {
 };
 
 export const getPlayerTotalGoals = (player, periods = []) => {
+  const numericPeriods = getNumericPeriods(periods);
+
   if (player?.goalsByPeriod) {
-    return periods.reduce(
+    return numericPeriods.reduce(
       (total, period) => total + getPlayerGoalsInPeriod(player, period.id, periods),
       0
     );
   }
 
-  return Math.max(0, Number(player?.goals) || 0);
+  // Compatibilità con i vecchi eventi senza mappa per tempo: il totale legacy
+  // appartiene al primo tempo soltanto se il suo nome è numerico.
+  return numericPeriods.length > 0 ? Math.max(0, Number(player?.goals) || 0) : 0;
 };
 
 export const getTeamScoreForPeriod = (team, periodId, periods = []) => {
@@ -48,12 +58,13 @@ export const getTeamTotalScore = (team, periods = []) => {
     0
   );
 
+  const numericPeriods = getNumericPeriods(periods);
   const offsets = team?.scoreOffsetsByPeriod
-    ? periods.reduce(
+    ? numericPeriods.reduce(
         (total, period) => total + (Number(team.scoreOffsetsByPeriod[period.id]) || 0),
         0
       )
-    : Number(team?.scoreOffset) || 0;
+    : (numericPeriods.length > 0 ? Number(team?.scoreOffset) || 0 : 0);
 
   return playerGoals + offsets;
 };

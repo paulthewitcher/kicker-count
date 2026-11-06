@@ -84,3 +84,9 @@ lockfile e contiene `.npmrc` con `include=optional`, necessario per preservare i
 pacchetti binari opzionali di Rollup. Dopo aver copiato i file nel repository,
 assicurati di eliminare anche da GitHub il vecchio `package-lock.json` e fai un
 redeploy Vercel senza cache. Istruzioni in `VERCEL_BUILD_FIX.md`.
+
+## Totale partita e tempi speciali
+
+Il tab `TOT` considera esclusivamente i tempi il cui nome è interamente numerico (`1`, `2`, `3`, ...). I tempi con nome testuale, ad esempio `Rigori` o `Extra time`, mantengono il proprio conteggio ma non contribuiscono al totale complessivo. La stessa regola è usata nella scheda evento e nell'export WhatsApp.
+
+I tab non selezionati usano lo stile antracite con testo bianco, coerente con il pulsante `+`; il tab selezionato usa `emerald-500` (`rgb(16 185 129)`).

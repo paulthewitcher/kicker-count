@@ -1,9 +1,10 @@
 import React, { memo } from 'react';
 import { Trash2, Clock } from 'lucide-react';
-import { getTeamScore, formatTimestamp } from '../utils/helpers';
+import { getEventPeriods, getTeamTotalScore, formatTimestamp } from '../utils/helpers';
 
 const EventCard = memo(function EventCard({ event, onClick, onDeleteClick, canDelete = false }) {
   const isLive = event.status === 'live';
+  const periods = getEventPeriods(event);
 
   return (
     <div 
@@ -60,14 +61,14 @@ const EventCard = memo(function EventCard({ event, onClick, onDeleteClick, canDe
           <span className="text-xs font-semibold mb-1 truncate w-full text-center" style={{ color: event.teams[0].color || '#ef4444' }}>
             {event.teams[0].name}
           </span>
-          <span className="text-2xl font-black text-white">{getTeamScore(event.teams[0])}</span>
+          <span className="text-2xl font-black text-white">{getTeamTotalScore(event.teams[0], periods)}</span>
         </div>
         <div className="text-slate-600 font-bold px-4">-</div>
         <div className="flex flex-col items-center flex-1">
           <span className="text-xs font-semibold mb-1 truncate w-full text-center" style={{ color: event.teams[1].color || '#174195' }}>
             {event.teams[1].name}
           </span>
-          <span className="text-2xl font-black text-white">{getTeamScore(event.teams[1])}</span>
+          <span className="text-2xl font-black text-white">{getTeamTotalScore(event.teams[1], periods)}</span>
         </div>
       </div>
     </div>
