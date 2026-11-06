@@ -677,15 +677,25 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80 rounded-t-3xl"></div>
 
         <button
+          type="button"
+          onClick={() => setShowEmojiModal(true)}
+          className="absolute top-4 left-4 z-10 w-9 h-9 flex items-center justify-center bg-slate-900/60 text-slate-400 border border-slate-700 rounded-lg hover:bg-slate-700 hover:text-slate-200 transition-colors"
+          title="Apri reazioni emoji"
+          aria-label="Apri reazioni emoji"
+        >
+          <Smile className="w-4 h-4" />
+        </button>
+
+        <button
           onClick={shareOnWhatsApp}
-          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"
+          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center bg-slate-900/60 text-slate-400 border border-slate-700 rounded-lg hover:bg-slate-700 hover:text-slate-200 transition-colors"
           title="Condividi su WhatsApp"
           aria-label="Condividi su WhatsApp"
         >
           <Share2 className="w-4 h-4" />
         </button>
 
-        <div className="text-center mb-5 mt-5 relative group/title flex flex-col items-center px-1">
+        <div className="text-center mb-5 mt-5 relative group/title flex flex-col items-center px-12">
           {isAdmin && isEditingTitle ? (
             <input
               autoFocus
@@ -916,19 +926,6 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
             {renderTeamPlayers(1, showTeam1Players, setShowTeam1Players, color1)}
           </div>
         </div>
-      </div>
-
-      {/* Pulsante reazioni: la griglia compare nella modale, non più in fondo alla pagina. */}
-      <div className="mt-3 flex items-center">
-        <button
-          type="button"
-          onClick={() => setShowEmojiModal(true)}
-          className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors"
-          title="Apri reazioni emoji"
-          aria-label="Apri reazioni emoji"
-        >
-          <Smile className="w-6 h-6" />
-        </button>
       </div>
 
       {(event.timeline && event.timeline.length > 0) && (
