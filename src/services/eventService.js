@@ -174,8 +174,8 @@ export const subscribeToLogs = (eventId, callback) => {
   });
 };
 
-// 4. Conferma eliminazione: confronta localmente il valore inserito con il seed già presente nell'evento.
-// Il valore digitato non viene mai incluso in richieste Firestore.
+// 4. Conferma eliminazione: usa la password configurata nel documento dell'evento.
+// Il valore digitato viene soltanto confrontato localmente e non viene scritto su Firestore.
 export const deleteEventWithPassword = async (eventId, inputPassword) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   const eventSnap = await getDoc(eventRef);
@@ -185,8 +185,10 @@ export const deleteEventWithPassword = async (eventId, inputPassword) => {
   }
 
   const data = eventSnap.data();
-  const expectedPassword = (data.seed || '').trim().toLowerCase();
-  const userPassword = (inputPassword || '').trim().toLowerCase();
+  // Mantiene la compatibilità con eventi meno recenti privi di deletePassword.
+  // Se il campo esiste, ha sempre precedenza sul seed.
+  const expectedPassword = String(data.deletePassword || data.seed || '').trim().toLowerCase();
+  const userPassword = String(inputPassword || '').trim().toLowerCase();
 
   if (expectedPassword === userPassword) {
     await deleteDoc(eventRef);
@@ -196,8 +198,8 @@ export const deleteEventWithPassword = async (eventId, inputPassword) => {
   }
 };
 
-// Elimina un tempo dopo aver confrontato localmente la conferma con il seed già presente nell'evento.
-// La password digitata non viene inviata a Firestore.
+// Elimina un tempo dopo aver verificato la password configurata nel documento dell'evento.
+// La password digitata non viene scritta su Firestore.
 export const deletePeriodWithPassword = async (eventId, periodId, inputPassword) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   const eventSnap = await getDoc(eventRef);
@@ -207,8 +209,9 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword)
   }
 
   const data = eventSnap.data();
-  const expectedPassword = (data.seed || '').trim().toLowerCase();
-  const userPassword = (inputPassword || '').trim().toLowerCase();
+  // Usa deletePassword quando presente; il seed resta un fallback per gli eventi legacy.
+  const expectedPassword = String(data.deletePassword || data.seed || '').trim().toLowerCase();
+  const userPassword = String(inputPassword || '').trim().toLowerCase();
 
   if (!expectedPassword || expectedPassword !== userPassword) {
     throw new Error('Password non corretta.');
