@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import {
   Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus,
-  Clock, Trash2, Check, RotateCcw, Hash, Smile, X, Lock, Pencil,
+  Clock, Trash2, Check, RotateCcw, Smile, X, Lock, Pencil,
   Save
 } from 'lucide-react';
 import { EMOJI_LIST, OPERA_GOAL_TEMPLATES } from '../utils/constants';
@@ -46,7 +46,7 @@ const normalizeMatchPeriods = (sourceEvent) => {
         0
       );
 
-      return { ...player, goalsByPeriod, goals };
+      return { ...player, goalsByPeriod, goals, goalHistory: Array.isArray(player.goalHistory) ? [...player.goalHistory] : [] };
     });
 
     const scoreOffset = Object.values(scoreOffsetsByPeriod).reduce(
@@ -68,6 +68,11 @@ const normalizeMatchPeriods = (sourceEvent) => {
     teams,
     nextPeriodNumber: Math.max(Number(sourceEvent.nextPeriodNumber) || 1, highestPeriodNumber + 1)
   };
+};
+
+const formatGoalDateTime = (date) => {
+  const pad = value => String(value).padStart(2, '0');
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
 const getPeriodShareName = (period) => {
@@ -268,7 +273,8 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
       name: newPlayerName.trim(),
       jersey: newPlayerJersey.trim(),
       goals: 0,
-      goalsByPeriod: Object.fromEntries(normalized.periods.map(period => [period.id, 0]))
+      goalsByPeriod: Object.fromEntries(normalized.periods.map(period => [period.id, 0])),
+      goalHistory: []
     };
 
     newTeams[playerModal.teamIndex].players = [
@@ -325,11 +331,44 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
       ...(player.goalsByPeriod || {}),
       [selectedPeriodId]: nextGoals
     };
-    player.goals = getPlayerTotalGoals(player, normalized.periods);
 
     const now = new Date();
+    const nowTimestamp = now.getTime();
     const timeString = now.toLocaleTimeString('it-IT', { hour12: false });
+    const goalDateTime = formatGoalDateTime(now);
     const selectedPeriodName = normalized.periods.find(period => period.id === selectedPeriodId)?.name || '';
+    let goalRecordId = null;
+    const goalHistory = Array.isArray(player.goalHistory) ? [...player.goalHistory] : [];
+
+    if (delta > 0) {
+      goalRecordId = crypto.randomUUID();
+      goalHistory.push({
+        id: goalRecordId,
+        periodId: selectedPeriodId,
+        timestamp: nowTimestamp,
+        dateTime: goalDateTime,
+        status: 'active'
+      });
+    } else if (delta < 0) {
+      // Conserva lo storico: un gol annullato viene marcato, non cancellato.
+      const lastActiveGoalIndex = goalHistory
+        .map((goal, index) => ({ goal, index }))
+        .filter(({ goal }) => goal.periodId === selectedPeriodId && goal.status !== 'cancelled')
+        .sort((a, b) => (Number(b.goal.timestamp) || 0) - (Number(a.goal.timestamp) || 0))[0]?.index;
+
+      if (lastActiveGoalIndex !== undefined) {
+        goalRecordId = goalHistory[lastActiveGoalIndex].id;
+        goalHistory[lastActiveGoalIndex] = {
+          ...goalHistory[lastActiveGoalIndex],
+          status: 'cancelled',
+          cancelledAt: nowTimestamp,
+          cancelledDateTime: goalDateTime
+        };
+      }
+    }
+
+    player.goalHistory = goalHistory;
+    player.goals = getPlayerTotalGoals(player, normalized.periods);
 
     let newTimeline = event.timeline || [];
     const eventUpdates = {
@@ -358,7 +397,9 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         periodId: selectedPeriodId,
         periodName: selectedPeriodName,
         time: timeString,
-        timestamp: now.getTime(),
+        timestamp: nowTimestamp,
+        dateTime: goalDateTime,
+        goalRecordId,
         customTemplate,
         customMessage: customTemplate ? customTemplate.replace(/<giocatore>/g, player.name) : null
       }, ...newTimeline];
@@ -374,7 +415,9 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         periodId: selectedPeriodId,
         periodName: selectedPeriodName,
         time: timeString,
-        timestamp: now.getTime()
+        timestamp: nowTimestamp,
+        dateTime: goalDateTime,
+        undoesGoalId: goalRecordId
       }, ...newTimeline];
     }
 
@@ -394,7 +437,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     const teamA = messageEvent.teams[0];
     const teamB = messageEvent.teams[1];
 
-    let text = `🏆 *${event.title}* (Stanza #${event.seed || 'default'})\n\n`;
+    let text = `🏆 *${event.title}*\n\n`;
     text += `🔴 *${teamA.name}* ${getTeamTotalScore(teamA, currentPeriods)} - ${getTeamTotalScore(teamB, currentPeriods)} *${teamB.name}* 🔵\n\n`;
     text += `⚽ *Marcatori - Totale partita:*\n`;
 
@@ -635,9 +678,11 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
 
         <button
           onClick={shareOnWhatsApp}
-          className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold hover:bg-emerald-500 hover:text-white transition-all"
+          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"
+          title="Condividi su WhatsApp"
+          aria-label="Condividi su WhatsApp"
         >
-          <Share2 className="w-4 h-4" /> <span>Condividi</span>
+          <Share2 className="w-4 h-4" />
         </button>
 
         <div className="text-center mb-5 mt-5 relative group/title flex flex-col items-center px-1">
@@ -672,15 +717,12 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
             ) : (
               <span className="bg-slate-700 text-slate-300 text-xs font-bold px-2 py-1 rounded">TERMINATA</span>
             )}
-            <span className="text-xs font-mono font-semibold text-emerald-400/80 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
-              <Hash className="w-3 h-3" /> {event.seed || 'default'}
-            </span>
             <span className="text-xs text-slate-500">Arbitro: {event.adminName}</span>
           </div>
         </div>
 
         {/* Tabellone: nel tab TOT mostra il risultato complessivo, negli altri tab il risultato del singolo tempo. */}
-        <div className="w-full space-y-3">
+        <div className="w-full space-y-2">
           <div className="bg-slate-900/60 rounded-2xl p-4 border border-slate-700">
             <div className="flex justify-between items-center">
               <div className="flex flex-col items-center w-2/5 min-w-0">
@@ -769,9 +811,9 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
             </div>
           </div>
 
-          {/* Tempi della partita */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin" role="tablist" aria-label="Tempi della partita">
+          {/* Tempi della partita: le azioni del tempo selezionato restano compatte in fondo alla riga. */}
+          <div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-thin" role="tablist" aria-label="Tempi della partita">
               <button
                 type="button"
                 role="tab"
@@ -783,7 +825,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                 }}
                 className={`shrink-0 min-w-[58px] px-3 py-2 rounded-md text-xs font-bold border transition-all ${
                   selectedPeriodId === TOTAL_PERIOD_ID
-                    ? 'bg-white text-slate-950 border-emerald-400 ring-2 ring-emerald-500/40'
+                    ? 'bg-[#feed00] text-slate-950 border-[#feed00] ring-2 ring-[#feed00]/30'
                     : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-white'
                 }`}
               >
@@ -803,7 +845,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   }}
                   className={`shrink-0 min-w-[42px] px-4 py-2 rounded-md text-xs font-bold border transition-all ${
                     selectedPeriodId === period.id
-                      ? 'bg-white text-slate-950 border-emerald-400 ring-2 ring-emerald-500/40'
+                      ? 'bg-[#feed00] text-slate-950 border-[#feed00] ring-2 ring-[#feed00]/30'
                       : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-white'
                   }`}
                 >
@@ -815,32 +857,30 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                 <button
                   type="button"
                   onClick={handleAddPeriod}
-                  className="shrink-0 w-10 h-9 flex items-center justify-center rounded-md bg-slate-700 border border-slate-600 text-white hover:bg-emerald-600 hover:border-emerald-500 transition-colors"
+                  className="shrink-0 w-9 h-9 flex items-center justify-center rounded-md bg-slate-700 border border-slate-600 text-white hover:bg-emerald-600 hover:border-emerald-500 transition-colors"
                   title="Aggiungi un tempo"
                   aria-label="Aggiungi un tempo"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               )}
-            </div>
 
-            <div className="min-h-8 flex items-center gap-3 px-1">
               {isAdmin && selectedPeriod && (
-                <>
+                <div className="shrink-0 flex items-center gap-0.5 ml-0.5 pl-1 border-l border-slate-700">
                   {isEditingPeriodName ? (
-                    <form onSubmit={savePeriodName} className="flex items-center gap-1.5">
+                    <form onSubmit={savePeriodName} className="flex items-center gap-1">
                       <input
                         autoFocus
                         value={draftPeriodName}
                         onChange={(e) => setDraftPeriodName(e.target.value)}
                         maxLength={32}
-                        className="w-32 bg-slate-900 border border-slate-600 rounded-md px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        className="w-24 bg-slate-900 border border-slate-600 rounded-md px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
                         aria-label="Nome del tempo"
                       />
-                      <button type="submit" className="text-emerald-400 hover:text-emerald-300 p-1" title="Salva nome">
+                      <button type="submit" className="w-7 h-7 flex items-center justify-center text-emerald-400 hover:text-emerald-300" title="Salva nome" aria-label="Salva nome">
                         <Save className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => setIsEditingPeriodName(false)} className="text-slate-500 hover:text-white p-1" title="Annulla">
+                      <button type="button" onClick={() => setIsEditingPeriodName(false)} className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-white" title="Annulla" aria-label="Annulla">
                         <X className="w-4 h-4" />
                       </button>
                     </form>
@@ -848,7 +888,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                     <button
                       type="button"
                       onClick={startEditingPeriodName}
-                      className="text-slate-400 hover:text-emerald-400 p-1 transition-colors"
+                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-emerald-400 transition-colors"
                       title="Rinomina il tempo"
                       aria-label="Rinomina il tempo"
                     >
@@ -859,25 +899,19 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   <button
                     type="button"
                     onClick={openDeletePeriodModal}
-                    className="text-slate-500 hover:text-red-400 p-1 transition-colors"
+                    className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors"
                     title="Elimina questo tempo"
                     aria-label="Elimina questo tempo"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
-                </>
-              )}
-
-              {selectedPeriodId === TOTAL_PERIOD_ID && (
-                <span className="text-[11px] text-slate-500">
-                  Totale complessivo. Seleziona un tempo per registrare o correggere i gol.
-                </span>
+                </div>
               )}
             </div>
           </div>
 
           {/* Lista giocatori condivisa tra tutti i tempi */}
-          <div className="space-y-4 transition-all">
+          <div className="space-y-3 transition-all">
             {renderTeamPlayers(0, showTeam0Players, setShowTeam0Players, color0)}
             {renderTeamPlayers(1, showTeam1Players, setShowTeam1Players, color1)}
           </div>

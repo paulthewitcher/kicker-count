@@ -33,7 +33,16 @@ Il documento Firestore della partita usa questa struttura per i tempi:
           goalsByPeriod: {
             'period-1': 2,
             'period-2': 4
-          }
+          },
+          goalHistory: [
+            {
+              id: 'goal-event-id',
+              periodId: 'period-1',
+              timestamp: 1793970000000,
+              dateTime: '06-11-2026 16:00:00',
+              status: 'active'
+            }
+          ]
         }
       ],
       scoreOffsetsByPeriod: {
@@ -46,10 +55,11 @@ Il documento Firestore della partita usa questa struttura per i tempi:
 ```
 
 - La lista dei giocatori rimane unica e condivisa tra tutti i tempi.
+- Ogni gol aggiunge una voce a `players[].goalHistory`, con tempo, timestamp numerico e data/ora locale `dd-mm-yyyy hh:mm:ss`. In caso di annullamento la voce resta nello storico con `status: 'cancelled'` e i dati dell'annullamento.
 - `TOT` somma i gol di tutti i tempi ed è una vista riepilogativa: per assegnare o correggere un gol bisogna selezionare un tempo specifico.
 - L'amministratore può aggiungere un tempo con `+`, rinominarlo e cancellarlo.
 - L'eliminazione richiede la password salvata sul documento Firestore (`deletePassword`, con fallback sul seed della partita). Vengono rimossi anche i gol e i log associati al tempo.
-- La condivisione WhatsApp include il risultato e i marcatori totali, seguiti dal risultato e dai marcatori di ogni tempo.
+- La condivisione WhatsApp include il titolo (senza Seed/Stanza), il risultato e i marcatori totali, seguiti dal risultato e dai marcatori di ogni tempo.
 - Gli eventi precedenti alla nuova struttura rimangono leggibili: i vecchi `players[].goals` vengono interpretati come gol del primo tempo e convertiti nella mappa per tempo al primo aggiornamento che salva i giocatori o i punteggi.
 
 ## Reazioni emoji

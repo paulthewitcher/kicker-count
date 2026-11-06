@@ -59,7 +59,8 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
         color: team.color || '#ef4444',
         players: (team.players || []).map(player => ({
           ...player,
-          goals: 0
+          goals: 0,
+          goalHistory: []
         }))
       }));
     }
@@ -226,6 +227,7 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword)
       const goalsByPeriod = player.goalsByPeriod
         ? { ...player.goalsByPeriod }
         : { 'period-1': Number(player.goals) || 0 };
+      const goalHistory = (player.goalHistory || []).filter(goal => goal.periodId !== periodId);
 
       delete goalsByPeriod[periodId];
 
@@ -234,7 +236,7 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword)
         0
       );
 
-      return { ...player, goalsByPeriod, goals };
+      return { ...player, goalsByPeriod, goals, goalHistory };
     });
 
     const scoreOffsetsByPeriod = team.scoreOffsetsByPeriod
