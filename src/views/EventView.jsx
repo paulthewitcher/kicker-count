@@ -1084,7 +1084,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-3 justify-items-center">
+            <div className="grid w-fit grid-cols-5 gap-x-1.5 gap-y-3 justify-items-center mx-auto">
               {EMOJI_LIST.map((emoji, index) => (
                 <ReactionButton
                   key={emoji}

@@ -15,12 +15,8 @@ const ReactionButton = memo(function ReactionButton({ emoji, index = 0, count = 
       const diff = count - prevCountRef.current;
       const bursts = Math.min(diff, 3); 
 
-      const col = index % 4;
-      let baseDrift = 0;
-      if (col === 0) baseDrift = 160;
-      else if (col === 1) baseDrift = 55;
-      else if (col === 2) baseDrift = -55;
-      else if (col === 3) baseDrift = -160;
+      const col = index % 5;
+      const baseDrift = [160, 80, 0, -80, -160][col];
 
       for (let j = 0; j < bursts; j++) {
         setTimeout(() => {

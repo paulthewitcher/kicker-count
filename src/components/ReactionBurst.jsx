@@ -9,8 +9,8 @@ const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 
   useEffect(() => {
     if (count > previousCount.current) {
       const bursts = Math.min(count - previousCount.current, 3);
-      const column = index % 4;
-      const baseDrift = [160, 55, -55, -160][column] || 0;
+      const column = index % 5;
+      const baseDrift = [160, 80, 0, -80, -160][column];
 
       for (let burst = 0; burst < bursts; burst += 1) {
         const timer = setTimeout(() => {
