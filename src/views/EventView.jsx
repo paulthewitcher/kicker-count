@@ -572,7 +572,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     setPeriodDeleteError('');
 
     try {
-      const result = await deletePeriodWithPassword(event.id, selectedPeriod.id, periodDeletePassword);
+      const result = await deletePeriodWithPassword(event.id, selectedPeriod.id, periodDeletePassword, event.seed);
       setEvent(previous => ({
         ...previous,
         periods: result.periods,

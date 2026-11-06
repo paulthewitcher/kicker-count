@@ -58,7 +58,7 @@ Il documento Firestore della partita usa questa struttura per i tempi:
 - Ogni gol aggiunge una voce a `players[].goalHistory`, con tempo, timestamp numerico e data/ora locale `dd-mm-yyyy hh:mm:ss`. In caso di annullamento la voce resta nello storico con `status: 'cancelled'` e i dati dell'annullamento.
 - `TOT` somma i gol di tutti i tempi ed è una vista riepilogativa: per assegnare o correggere un gol bisogna selezionare un tempo specifico.
 - L'amministratore può aggiungere un tempo con `+`, rinominarlo e cancellarlo.
-- L'eliminazione richiede una conferma nella modale. Il valore inserito viene confrontato localmente con il `seed` della partita già caricato da Firestore; non viene incluso in richieste di lettura/scrittura. Vengono rimossi anche i gol e i log associati al tempo.
+- L'eliminazione richiede una conferma nella modale. La password viene letta dal documento della stanza identificato dal Seed (`artifacts/{appId}/public/data/events/{seed}`); i dati della singola partita possono invece avere un ID UUID. Vengono rimossi anche i gol e i log associati al tempo.
 - La condivisione WhatsApp include il titolo (senza Seed/Stanza), il risultato e i marcatori totali, seguiti dal risultato e dai marcatori di ogni tempo.
 - Gli eventi precedenti alla nuova struttura rimangono leggibili: i vecchi `players[].goals` vengono interpretati come gol del primo tempo e convertiti nella mappa per tempo al primo aggiornamento che salva i giocatori o i punteggi.
 
@@ -71,8 +71,8 @@ Le reazioni sono disponibili dalla nuova icona sopra la cronologia. La scelta av
 ## Permessi amministratore e conferma di eliminazione
 
 - Nella bacheca il cestino viene mostrato solo quando `event.adminId` coincide con l'UID Firebase dell'utente corrente. L'apertura della modale e l'handler di conferma ripetono il controllo.
-- La modale chiede una conferma. Il valore digitato viene confrontato nel client con il `seed` della partita, già presente nei dati dell'evento. Il valore digitato **non viene inviato** a Firestore, non viene salvato e non viene scritto in alcun campo.
-- Le nuove partite non creano più il campo duplicato `deletePassword`: il codice usa esclusivamente `seed` per il confronto locale. Nei documenti storici il vecchio campo `deletePassword`, se presente, viene ignorato e non viene più letto né aggiornato. Non viene eseguita alcuna migrazione automatica dei dati.
+- La modale chiede una conferma. Il valore digitato viene confrontato nel client con `deletePassword` del documento della stanza, il cui ID coincide con il Seed: `artifacts/{appId}/public/data/events/{seed}`.
+- I documenti delle singole partite possono avere un ID UUID diverso dal Seed. Per questo il codice legge il documento della partita e, quando il Seed è diverso dall'ID della partita, legge anche il documento della stanza. Se `deletePassword` non è presente, usa il Seed come compatibilità. Il valore digitato **non viene scritto** su Firestore. Non viene eseguita alcuna migrazione automatica dei dati.
 - Questa conferma è una protezione contro eliminazioni accidentali, non un'autorizzazione server-side: senza modificare le regole Firestore o introdurre un endpoint server, l'autorizzazione effettiva delle operazioni dipende dalle Security Rules già attive nel progetto Firebase. Non è richiesta alcuna Cloud Function, Secret Manager, attivazione Blaze o modifica di configurazione Firebase per questa versione.
 
 ## Deploy Vercel – correzione dipendenze Rollup

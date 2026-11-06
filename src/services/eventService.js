@@ -17,8 +17,11 @@ export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
     const cleanSeed = (seed || '').trim().toLowerCase();
     
     const fetchedEvents = snapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(evt => (evt.seed || '').trim().toLowerCase() === cleanSeed);
+      // Il document ID è sempre la fonte autorevole per l'ID dell'evento.
+      // Nei documenti legacy il Seed può coincidere con il document ID e
+      // il campo `seed` può non essere presente.
+      .map(docSnap => ({ ...docSnap.data(), id: docSnap.id }))
+      .filter(evt => String(evt.seed || evt.id || '').trim().toLowerCase() === cleanSeed);
 
     fetchedEvents.sort((a, b) => {
       if (a.status === 'live' && b.status !== 'live') return -1;
@@ -35,7 +38,7 @@ export const subscribeToSingleEvent = (eventId, onEventUpdate, onError) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   return onSnapshot(eventRef, (docSnap) => {
     if (docSnap.exists()) {
-      onEventUpdate({ id: docSnap.id, ...docSnap.data() });
+      onEventUpdate({ ...docSnap.data(), id: docSnap.id });
     }
   }, onError);
 };
@@ -174,9 +177,57 @@ export const subscribeToLogs = (eventId, callback) => {
   });
 };
 
-// 4. Conferma eliminazione: usa la password configurata nel documento dell'evento.
-// Il valore digitato viene soltanto confrontato localmente e non viene scritto su Firestore.
-export const deleteEventWithPassword = async (eventId, inputPassword) => {
+// Password usata per la conferma locale di eliminazioni.
+// La configurazione della password si trova nel documento della stanza (ID = Seed),
+// mentre i singoli eventi possono avere un ID UUID separato.
+// Il valore digitato non viene mai scritto su Firestore.
+const getDeletePasswordContext = async (eventData, eventId, roomSeed) => {
+  const roomDocumentId = String(roomSeed || eventData?.seed || eventId || '')
+    .trim()
+    .toLowerCase();
+
+  let roomData = eventData || {};
+  if (roomDocumentId && roomDocumentId !== String(eventId)) {
+    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', roomDocumentId);
+    const roomSnap = await getDoc(roomRef);
+    if (roomSnap.exists()) roomData = roomSnap.data();
+  }
+
+  // Prima il documento stanza esplicito, poi l'eventuale campo del singolo evento,
+  // infine i valori legacy Seed/ID. Non si crea o modifica alcun campo su Firebase.
+  const candidates = [
+    roomData?.deletePassword,
+    eventData?.deletePassword,
+    roomData?.seed,
+    eventData?.seed,
+    roomDocumentId,
+    eventId
+  ];
+  const expectedPassword = String(candidates.find(value => String(value ?? '').trim()) ?? '')
+    .trim()
+    .toLowerCase();
+
+  return { expectedPassword, roomDocumentId };
+};
+
+const assertDeletePassword = async (eventData, eventId, inputPassword, roomSeed) => {
+  const { expectedPassword, roomDocumentId } = await getDeletePasswordContext(
+    eventData,
+    eventId,
+    roomSeed
+  );
+  const userPassword = String(inputPassword ?? '').trim().toLowerCase();
+
+  if (!expectedPassword) {
+    throw new Error(`Nel documento della stanza "${roomDocumentId || eventId}" non è configurata una password di eliminazione.`);
+  }
+  if (expectedPassword !== userPassword) {
+    throw new Error(`Password non corretta. Verifica effettuata sul documento della stanza "${roomDocumentId || eventId}".`);
+  }
+};
+
+// 4. Conferma eliminazione: legge la password dal documento della stanza (ID = Seed).
+export const deleteEventWithPassword = async (eventId, inputPassword, roomSeed) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   const eventSnap = await getDoc(eventRef);
 
@@ -185,22 +236,15 @@ export const deleteEventWithPassword = async (eventId, inputPassword) => {
   }
 
   const data = eventSnap.data();
-  // Mantiene la compatibilità con eventi meno recenti privi di deletePassword.
-  // Se il campo esiste, ha sempre precedenza sul seed.
-  const expectedPassword = String(data.deletePassword || data.seed || '').trim().toLowerCase();
-  const userPassword = String(inputPassword || '').trim().toLowerCase();
+  await assertDeletePassword(data, eventSnap.id, inputPassword, roomSeed);
 
-  if (expectedPassword === userPassword) {
-    await deleteDoc(eventRef);
-    return true;
-  } else {
-    throw new Error("Password errata.");
-  }
+  await deleteDoc(eventRef);
+  return true;
 };
 
-// Elimina un tempo dopo aver verificato la password configurata nel documento dell'evento.
+// Elimina un tempo dopo aver verificato la password nel documento della stanza (Seed).
 // La password digitata non viene scritta su Firestore.
-export const deletePeriodWithPassword = async (eventId, periodId, inputPassword) => {
+export const deletePeriodWithPassword = async (eventId, periodId, inputPassword, roomSeed) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   const eventSnap = await getDoc(eventRef);
 
@@ -209,13 +253,7 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword)
   }
 
   const data = eventSnap.data();
-  // Usa deletePassword quando presente; il seed resta un fallback per gli eventi legacy.
-  const expectedPassword = String(data.deletePassword || data.seed || '').trim().toLowerCase();
-  const userPassword = String(inputPassword || '').trim().toLowerCase();
-
-  if (!expectedPassword || expectedPassword !== userPassword) {
-    throw new Error('Password non corretta.');
-  }
+  await assertDeletePassword(data, eventSnap.id, inputPassword, roomSeed);
 
   const periods = Array.isArray(data.periods)
     ? data.periods

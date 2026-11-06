@@ -105,7 +105,7 @@ export default function App() {
       throw new Error('Solo l’amministratore di questa partita può eliminarla.');
     }
 
-    await deleteEventWithPassword(targetEvent.id, password);
+    await deleteEventWithPassword(targetEvent.id, password, targetEvent.seed);
 
     if (currentEventId === targetEvent.id) {
       setCurrentEventId(null);
