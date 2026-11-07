@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import {
-  Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus, UserMinus,
+  Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus,
   Clock, Trash2, Check, RotateCcw, Smile, X, Lock, Pencil,
   Save
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import {
 } from '../utils/helpers';
 import {
   updateEventData,
+  updateEventDataWithGoalReaction,
   addEmojiReaction,
   subscribeToSingleEvent,
   deletePeriodWithPassword
@@ -25,6 +26,7 @@ import ReactionBurst from '../components/ReactionBurst';
 import AddPlayerModal from '../components/modals/AddPlayerModal';
 import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
+import EditPlayerModal from '../components/modals/EditPlayerModal';
 
 const TOTAL_PERIOD_ID = 'total';
 
@@ -117,6 +119,9 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerJersey, setNewPlayerJersey] = useState('');
   const [deleteConfirmModal, setDeleteConfirmModal] = useState({ isOpen: false, teamIndex: null, playerId: null, playerName: '' });
+  const [editPlayerModal, setEditPlayerModal] = useState({ isOpen: false, teamIndex: null, playerId: null });
+  const [editPlayerName, setEditPlayerName] = useState('');
+  const [editPlayerJersey, setEditPlayerJersey] = useState('');
 
   const [editingScore, setEditingScore] = useState({ teamIndex: null, tempScore: '' });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -304,7 +309,54 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     });
   };
 
+  const openEditPlayerModal = (teamIndex, player) => {
+    if (!isAdmin || !isLive) return;
+    setEditPlayerModal({ isOpen: true, teamIndex, playerId: player.id });
+    setEditPlayerName(player.name || '');
+    setEditPlayerJersey(player.jersey || '');
+  };
+
+  const closeEditPlayerModal = () => {
+    setEditPlayerModal({ isOpen: false, teamIndex: null, playerId: null });
+    setEditPlayerName('');
+    setEditPlayerJersey('');
+  };
+
+  const handleEditPlayerSave = (e) => {
+    e.preventDefault();
+    if (!isAdmin || !isLive || editPlayerModal.teamIndex === null || !editPlayerModal.playerId) return;
+
+    const cleanName = editPlayerName.trim();
+    if (!cleanName) return;
+
+    const normalized = normalizeMatchPeriods(event);
+    const player = normalized.teams[editPlayerModal.teamIndex]?.players
+      .find(item => item.id === editPlayerModal.playerId);
+    if (!player) {
+      closeEditPlayerModal();
+      return;
+    }
+
+    player.name = cleanName;
+    player.jersey = editPlayerJersey.trim();
+
+    updateEventData(event.id, {
+      periods: normalized.periods,
+      teams: normalized.teams
+    });
+    closeEditPlayerModal();
+  };
+
+  const handleDeletePlayerFromEdit = () => {
+    if (!isAdmin || !isLive || editPlayerModal.teamIndex === null || !editPlayerModal.playerId) return;
+    const { teamIndex, playerId } = editPlayerModal;
+    const player = event.teams[teamIndex]?.players?.find(item => item.id === playerId);
+    closeEditPlayerModal();
+    if (player) promptRemovePlayer(teamIndex, player);
+  };
+
   const executeRemovePlayer = () => {
+    if (!isAdmin || !isLive) return;
     const { teamIndex, playerId } = deleteConfirmModal;
     if (teamIndex === null || !playerId) return;
 
@@ -409,9 +461,6 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         customMessage: customTemplate ? customTemplate.replace(/<giocatore>/g, player.name) : null
       }, ...newTimeline];
 
-      addEmojiReaction(event.id, '⚽').catch(error => {
-        console.warn('Impossibile registrare la reazione al gol:', error);
-      });
     } else if (delta < 0) {
       newTimeline = [{
         id: crypto.randomUUID(),
@@ -427,7 +476,15 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     }
 
     eventUpdates.timeline = newTimeline;
-    updateEventData(event.id, eventUpdates);
+
+    // Il goal e la reazione ⚽ vengono salvati con un'unica scrittura: il listener
+    // riceve un solo aggiornamento coerente e ReactionBurst può animare il pallone.
+    const savePromise = delta > 0
+      ? updateEventDataWithGoalReaction(event.id, eventUpdates)
+      : updateEventData(event.id, eventUpdates);
+    savePromise.catch(error => {
+      console.error('Impossibile aggiornare la partita:', error);
+    });
   };
 
   const deleteLog = (logId) => {
@@ -646,11 +703,12 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   <div className="flex items-center gap-2 min-w-0">
                     {isAdmin && isLive && (
                       <button
-                        onClick={() => promptRemovePlayer(teamIndex, player)}
-                        className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg bg-slate-950/40 hover:bg-red-500/10 transition-colors shrink-0"
-                        title="Rimuovi giocatore"
+                        onClick={() => openEditPlayerModal(teamIndex, player)}
+                        className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg bg-slate-950/40 hover:bg-slate-800 transition-colors shrink-0"
+                        title="Modifica giocatore"
+                        aria-label={`Modifica ${player.name}`}
                       >
-                        <UserMinus className="w-4 h-4" />
+                        <Pencil className="w-4 h-4" />
                       </button>
                     )}
                     <span className="font-medium text-slate-200 text-sm truncate">
@@ -1069,6 +1127,17 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         teamModal={teamModal}
         setTeamModal={setTeamModal}
         onSave={handleSaveTeamDetails}
+      />
+
+      <EditPlayerModal
+        isOpen={editPlayerModal.isOpen}
+        playerName={editPlayerName}
+        jersey={editPlayerJersey}
+        setPlayerName={setEditPlayerName}
+        setJersey={setEditPlayerJersey}
+        onClose={closeEditPlayerModal}
+        onConfirm={handleEditPlayerSave}
+        onDelete={handleDeletePlayerFromEdit}
       />
 
       <DeletePlayerModal

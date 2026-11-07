@@ -119,6 +119,16 @@ export const updateEventData = async (eventId, newData) => {
   await updateDoc(eventRef, newData);
 };
 
+// Aggiorna il goal e incrementa la reazione pallone in modo atomico.
+// In questo modo il listener riceve sempre il nuovo conteggio usato da ReactionBurst.
+export const updateEventDataWithGoalReaction = async (eventId, newData) => {
+  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  await updateDoc(eventRef, {
+    ...newData,
+    'reactions.⚽': increment(1)
+  });
+};
+
 export const deleteEvent = async (eventId) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
   await deleteDoc(eventRef);

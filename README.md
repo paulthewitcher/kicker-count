@@ -90,3 +90,11 @@ redeploy Vercel senza cache. Istruzioni in `VERCEL_BUILD_FIX.md`.
 Il tab `TOT` considera esclusivamente i tempi il cui nome è interamente numerico (`1`, `2`, `3`, ...). I tempi con nome testuale, ad esempio `Rigori` o `Extra time`, mantengono il proprio conteggio ma non contribuiscono al totale complessivo. La stessa regola è usata nella scheda evento e nell'export WhatsApp.
 
 I tab non selezionati usano lo stile antracite con testo bianco, coerente con il pulsante `+`; il tab selezionato usa `emerald-500` (`rgb(16 185 129)`).
+
+## Aggiornamento V13 – animazione goal e modifica giocatori
+
+- Ripristinata l'animazione del pallone ⚽ quando viene assegnato un goal. Il salvataggio del goal e l'incremento della reazione pallone avvengono con un'unica scrittura Firestore; l'animazione resta definita nel CSS globale anche con la modale Emoji chiusa.
+- Sostituita l'icona di rimozione accanto a ciascun giocatore con l'icona Modifica.
+- Aggiunta la modale di modifica del giocatore con campi Nome e Numero Maglia, azioni Annulla e Conferma e icona cestino.
+- Il cestino nella modale apre la conferma esistente “Rimuovi Giocatore”, con Annulla e Cancella.
+- La modifica e la rimozione restano disponibili solo all'amministratore della partita in corso.
