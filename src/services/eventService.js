@@ -8,7 +8,8 @@ import {
   deleteDoc, 
   increment, 
   getDoc, 
-  arrayUnion 
+  arrayUnion,
+  runTransaction 
 } from 'firebase/firestore';
 
 export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
@@ -114,18 +115,88 @@ export const createEvent = async ({ user, nickname, seed, title, importId, pastE
   return newEventId;
 };
 
+// Tiene traccia delle scritture complete dei dati evento già avviate dal client.
+// Prima dello scambio aspettiamo che queste finiscano, così un goal appena registrato
+// non può sovrascrivere successivamente l'ordine nuovo delle squadre.
+const pendingEventWrites = new Map();
+
+const trackEventWrite = (eventId, writePromise) => {
+  const pending = pendingEventWrites.get(eventId) || new Set();
+  pending.add(writePromise);
+  pendingEventWrites.set(eventId, pending);
+
+  const cleanup = () => {
+    pending.delete(writePromise);
+    if (pending.size === 0) pendingEventWrites.delete(eventId);
+  };
+
+  writePromise.then(cleanup, cleanup);
+  return writePromise;
+};
+
+const waitForPendingEventWrites = async (eventId) => {
+  const pending = [...(pendingEventWrites.get(eventId) || [])];
+  if (pending.length) await Promise.allSettled(pending);
+};
+
 export const updateEventData = async (eventId, newData) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  await updateDoc(eventRef, newData);
+  const writePromise = updateDoc(eventRef, newData);
+  await trackEventWrite(eventId, writePromise);
 };
 
 // Aggiorna il goal e incrementa la reazione pallone in modo atomico.
 // In questo modo il listener riceve sempre il nuovo conteggio usato da ReactionBurst.
 export const updateEventDataWithGoalReaction = async (eventId, newData) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  await updateDoc(eventRef, {
+  const writePromise = updateDoc(eventRef, {
     ...newData,
     'reactions.⚽': increment(1)
+  });
+  await trackEventWrite(eventId, writePromise);
+};
+
+// Scambia le due squadre senza ricostruirne i dati. La transazione legge sempre
+// la versione più aggiornata dell'evento e verifica nuovamente l'amministratore.
+export const swapEventTeams = async (eventId, adminUid) => {
+  if (!adminUid) throw new Error('Utente non autenticato.');
+
+  // Completa prima le scritture evento già avviate (es. un goal appena cliccato).
+  await waitForPendingEventWrites(eventId);
+
+  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+
+  return runTransaction(db, async (transaction) => {
+    const eventSnap = await transaction.get(eventRef);
+    if (!eventSnap.exists()) throw new Error('Partita non trovata.');
+
+    const eventData = eventSnap.data();
+    if (eventData.adminId !== adminUid) {
+      throw new Error('Non sei autorizzato a scambiare le squadre di questa partita.');
+    }
+
+    if (!Array.isArray(eventData.teams) || eventData.teams.length !== 2) {
+      throw new Error('La partita non contiene esattamente due squadre.');
+    }
+
+    const swappedTeams = [...eventData.teams];
+    [swappedTeams[0], swappedTeams[1]] = [swappedTeams[1], swappedTeams[0]];
+
+    // I log dei gol raccontano un fatto storico e restano invariati. I log di
+    // fine partita esprimono invece il risultato nel verso casa-trasferta: li
+    // invertiamo così rimangono coerenti con il nuovo ordine delle squadre.
+    const updates = { teams: swappedTeams };
+    if (Array.isArray(eventData.timeline)) {
+      updates.timeline = eventData.timeline.map((log) => {
+        if (log?.type !== 'end' || typeof log.scoreString !== 'string') return log;
+        const scoreMatch = log.scoreString.match(/^\s*(\d+)\s*-\s*(\d+)\s*$/);
+        if (!scoreMatch) return log;
+        return { ...log, scoreString: `${scoreMatch[2]}-${scoreMatch[1]}` };
+      });
+    }
+
+    transaction.update(eventRef, updates);
+    return swappedTeams;
   });
 };
 

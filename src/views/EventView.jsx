@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, memo } from 'react';
 import {
   Share2, Edit2, Palette, ChevronUp, ChevronDown, Plus,
   Clock, Trash2, Check, RotateCcw, Smile, X, Lock, Pencil,
-  Save
+  Save, ArrowLeftRight
 } from 'lucide-react';
 import { EMOJI_LIST, OPERA_GOAL_TEMPLATES, getTeamColorEmoji } from '../utils/constants';
 import {
@@ -19,7 +19,8 @@ import {
   updateEventDataWithGoalReaction,
   addEmojiReaction,
   subscribeToSingleEvent,
-  deletePeriodWithPassword
+  deletePeriodWithPassword,
+  swapEventTeams
 } from '../services/eventService';
 import ReactionButton from '../components/ReactionButton';
 import ReactionBurst from '../components/ReactionBurst';
@@ -27,6 +28,7 @@ import AddPlayerModal from '../components/modals/AddPlayerModal';
 import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
 import EditPlayerModal from '../components/modals/EditPlayerModal';
+import SwapTeamsModal from '../components/modals/SwapTeamsModal';
 
 const TOTAL_PERIOD_ID = 'total';
 
@@ -134,6 +136,9 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
   const [periodDeletePassword, setPeriodDeletePassword] = useState('');
   const [periodDeleteError, setPeriodDeleteError] = useState('');
   const [isDeletingPeriod, setIsDeletingPeriod] = useState(false);
+  const [isSwapTeamsModalOpen, setIsSwapTeamsModalOpen] = useState(false);
+  const [isSwappingTeams, setIsSwappingTeams] = useState(false);
+  const [swapTeamsError, setSwapTeamsError] = useState('');
 
   const periods = useMemo(() => getEventPeriods(event), [event]);
   const selectedPeriod = periods.find(period => period.id === selectedPeriodId);
@@ -155,6 +160,40 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
       setTempTitle(event.title);
     }
     setIsEditingTitle(false);
+  };
+
+  const openSwapTeamsModal = () => {
+    if (!isAdmin || event.teams?.length !== 2) return;
+    // Evita che un punteggio in modifica rimanga legato alla vecchia posizione.
+    setEditingScore({ teamIndex: null, tempScore: '' });
+    setSwapTeamsError('');
+    setIsSwapTeamsModalOpen(true);
+  };
+
+  const closeSwapTeamsModal = () => {
+    if (isSwappingTeams) return;
+    setIsSwapTeamsModalOpen(false);
+    setSwapTeamsError('');
+  };
+
+  const confirmSwapTeams = async () => {
+    if (!isAdmin || !user?.uid || isSwappingTeams) return;
+
+    setIsSwappingTeams(true);
+    setSwapTeamsError('');
+    try {
+      const swappedTeams = await swapEventTeams(event.id, user.uid);
+      setEvent(previous => ({ ...previous, teams: swappedTeams }));
+      // Mantiene lo stato aperto/chiuso legato alla squadra, non alla posizione.
+      setShowTeam0Players(showTeam1Players);
+      setShowTeam1Players(showTeam0Players);
+      setIsSwapTeamsModalOpen(false);
+    } catch (error) {
+      console.error('Impossibile scambiare le squadre:', error);
+      setSwapTeamsError(error.message || 'Impossibile scambiare le squadre. Riprova.');
+    } finally {
+      setIsSwappingTeams(false);
+    }
   };
 
   const setMatchStatus = (status) => {
@@ -450,6 +489,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         id: crypto.randomUUID(),
         type: 'goal',
         playerName: player.name,
+        teamId: newTeams[teamIndex].id || null,
         teamName: newTeams[teamIndex].name,
         periodId: selectedPeriodId,
         periodName: selectedPeriodName,
@@ -678,18 +718,28 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
             <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: color }}></span>
             <span className="truncate">{team.name.toUpperCase()} ({team.players?.length || 0})</span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
             {isAdmin && isLive && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); openAddPlayerModal(teamIndex); }}
-                className="text-xs bg-black/30 hover:bg-black/50 px-2 py-1 rounded text-white flex items-center gap-1"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-600/70 bg-slate-700/80 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                title="Aggiungi giocatore"
+                aria-label={`Aggiungi un giocatore a ${team.name}`}
               >
-                <Plus className="w-3 h-3" /> Aggiungi
+                <Plus className="h-5 w-5" strokeWidth={2.25} />
               </button>
             )}
-            <span className="text-slate-400 text-xs flex items-center gap-1">
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200 active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              title={expanded ? 'Comprimi squadra' : 'Espandi squadra'}
+              aria-label={expanded ? `Comprimi ${team.name}` : `Espandi ${team.name}`}
+              aria-expanded={expanded}
+            >
+              {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
           </div>
         </div>
 
@@ -850,7 +900,20 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                 )}
               </div>
 
-              <div className="text-xl font-bold text-slate-500 shrink-0">VS</div>
+              <div className="relative flex items-center justify-center shrink-0">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={openSwapTeamsModal}
+                    disabled={event.teams?.length !== 2}
+                    className="absolute left-1/2 -top-10 -translate-x-1/2 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200 active:bg-slate-600 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    aria-label="Scambia le squadre"
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                  </button>
+                )}
+                <div className="text-xl font-bold text-slate-500">VS</div>
+              </div>
 
               <div className="flex flex-col items-center w-2/5 min-w-0">
                 <button
@@ -1048,7 +1111,11 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                 return (
                   <span>
                     <span className="font-bold text-white">{log.playerName}</span> ha segnato per{' '}
-                    <span style={{ color: log.teamName === event.teams[0].name ? color0 : color1 }}>{log.teamName}</span> ⚽
+                    <span style={{
+                      color: (log.teamId
+                        ? event.teams.find(team => team.id === log.teamId)?.color
+                        : event.teams.find(team => team.name === log.teamName)?.color) || color0
+                    }}>{log.teamName}</span> ⚽
                     {log.periodName && <span className="text-slate-500 text-xs"> ({log.periodName})</span>}
                   </span>
                 );
@@ -1138,6 +1205,14 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         onClose={closeEditPlayerModal}
         onConfirm={handleEditPlayerSave}
         onDelete={handleDeletePlayerFromEdit}
+      />
+
+      <SwapTeamsModal
+        isOpen={isSwapTeamsModalOpen}
+        isBusy={isSwappingTeams}
+        error={swapTeamsError}
+        onClose={closeSwapTeamsModal}
+        onConfirm={confirmSwapTeams}
       />
 
       <DeletePlayerModal

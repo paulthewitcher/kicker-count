@@ -98,3 +98,13 @@ I tab non selezionati usano lo stile antracite con testo bianco, coerente con il
 - Aggiunta la modale di modifica del giocatore con campi Nome e Numero Maglia, azioni Annulla e Conferma e icona cestino.
 - Il cestino nella modale apre la conferma esistente “Rimuovi Giocatore”, con Annulla e Cancella.
 - La modifica e la rimozione restano disponibili solo all'amministratore della partita in corso.
+
+## Scambio delle squadre (V16)
+
+- Il pulsante con la sola icona `ArrowLeftRight` compare sopra `VS` esclusivamente all'amministratore della partita.
+- Dopo la conferma, una transazione Firestore verifica nuovamente `adminId` e scambia integralmente `teams[0]` e `teams[1]`.
+- Nomi, colori, giocatori, numeri di maglia, conteggi per tempo, cronologia dei gol e offset di punteggio restano all'interno del rispettivo oggetto squadra. Non è richiesta alcuna migrazione o modifica alla configurazione Firebase.
+- Le scritture complete dell'evento già avviate dal client vengono attese prima della transazione di scambio, per evitare che un aggiornamento appena partito (ad esempio un gol) sovrascriva il nuovo ordine.
+- I nuovi log di gol includono anche `teamId`, così il colore in cronologia rimane associato alla squadra anche dopo lo scambio. I log precedenti continuano a usare il nome della squadra già registrato.
+- I log storici dei gol restano invariati; i risultati nei log di fine partita vengono invertiti nello stesso aggiornamento, così continuano a rappresentare il nuovo ordine casa-trasferta.
+- Scheda evento, schermata partita ed export WhatsApp leggono l'ordine corrente dell'array `teams`, quindi mostrano automaticamente la nuova squadra di casa e quella ospite.
