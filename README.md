@@ -108,3 +108,7 @@ I tab non selezionati usano lo stile antracite con testo bianco, coerente con il
 - I nuovi log di gol includono anche `teamId`, così il colore in cronologia rimane associato alla squadra anche dopo lo scambio. I log precedenti continuano a usare il nome della squadra già registrato.
 - I log storici dei gol restano invariati; i risultati nei log di fine partita vengono invertiti nello stesso aggiornamento, così continuano a rappresentare il nuovo ordine casa-trasferta.
 - Scheda evento, schermata partita ed export WhatsApp leggono l'ordine corrente dell'array `teams`, quindi mostrano automaticamente la nuova squadra di casa e quella ospite.
+
+## UI refinement (V17)
+- The team-swap control keeps its 40x40px touch area but has a transparent background and border, leaving only the swap icon visible on mobile.
+- The add-player control is slightly narrower (40x40px instead of 44x44px), and its plus icon is reduced one size step (20px to 16px).

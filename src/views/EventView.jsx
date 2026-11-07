@@ -723,11 +723,11 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); openAddPlayerModal(teamIndex); }}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-600/70 bg-slate-700/80 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-600/70 bg-slate-700/80 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                 title="Aggiungi giocatore"
                 aria-label={`Aggiungi un giocatore a ${team.name}`}
               >
-                <Plus className="h-5 w-5" strokeWidth={2.25} />
+                <Plus className="h-4 w-4" strokeWidth={2.25} />
               </button>
             )}
             <button
@@ -906,7 +906,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                     type="button"
                     onClick={openSwapTeamsModal}
                     disabled={event.teams?.length !== 2}
-                    className="absolute left-1/2 -top-10 -translate-x-1/2 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200 active:bg-slate-600 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    className="absolute left-1/2 -top-10 -translate-x-1/2 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-transparent bg-transparent text-slate-400 transition-colors hover:bg-transparent hover:text-slate-300 active:bg-transparent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     aria-label="Scambia le squadre"
                   >
                     <ArrowLeftRight className="h-4 w-4" />
