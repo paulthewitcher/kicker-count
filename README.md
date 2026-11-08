@@ -119,3 +119,11 @@ I tab non selezionati usano lo stile antracite con testo bianco, coerente con il
 - La selezione manuale di ⚽ nella modale usa lo stesso trigger locale per l'amministratore; le altre emoji continuano a usare il contatore condiviso.
 - `ReactionBurst` viene renderizzato in un React portal su `document.body`: l'overlay non è più influenzato da `transform` o `overflow` dei contenitori della schermata partita.
 - Le particelle hanno un punto di partenza esplicito in basso al centro e un'animazione CSS globale con durata e traiettoria variabili.
+
+
+## Correzione animazione goal (V19)
+
+- L'assegnazione di un goal salva prima i dati della partita e poi incrementa `reactions.⚽` richiamando la stessa funzione `addEmojiReaction` usata dal click manuale sull'emoji nella modale.
+- `ReactionBurst` ascolta esclusivamente il contatore Firestore per tutte le persone, amministratore incluso: non esistono più trigger locali separati che possono divergere dal flusso delle reazioni.
+- La modale non genera una seconda animazione: il suo contatore resta disabilitato per l'animazione locale e l'overlay globale reagisce al singolo incremento condiviso.
+- Goal e reazione sono due scritture sequenziali: se il salvataggio del goal fallisce, la reazione non viene incrementata; se la reazione fallisce, il goal rimane salvato e l'errore viene riportato in console.

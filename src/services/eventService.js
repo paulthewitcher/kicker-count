@@ -145,15 +145,13 @@ export const updateEventData = async (eventId, newData) => {
   await trackEventWrite(eventId, writePromise);
 };
 
-// Aggiorna il goal e incrementa la reazione pallone in modo atomico.
-// In questo modo il listener riceve sempre il nuovo conteggio usato da ReactionBurst.
+// Registra prima il goal, poi incrementa la reazione ⚽ usando ESATTAMENTE
+// la stessa funzione richiamata dal click manuale sull'emoji nella modale.
+// L'animazione di tutti i client dipende soltanto dal contatore Firestore:
+// niente trigger locali separati e nessuna doppia animazione per l'admin.
 export const updateEventDataWithGoalReaction = async (eventId, newData) => {
-  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  const writePromise = updateDoc(eventRef, {
-    ...newData,
-    'reactions.⚽': increment(1)
-  });
-  await trackEventWrite(eventId, writePromise);
+  await updateEventData(eventId, newData);
+  await addEmojiReaction(eventId, '⚽');
 };
 
 // Scambia le due squadre senza ricostruirne i dati. La transazione legge sempre

@@ -130,9 +130,6 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
   const [tempTitle, setTempTitle] = useState(event.title);
 
   const [showEmojiModal, setShowEmojiModal] = useState(false);
-  // Trigger locale per l'admin: l'animazione del goal parte senza dipendere
-  // dai tempi di consegna del listener Firestore. Gli spettatori usano il contatore remoto.
-  const [goalAnimationTrigger, setGoalAnimationTrigger] = useState(0);
   const [isEditingPeriodName, setIsEditingPeriodName] = useState(false);
   const [draftPeriodName, setDraftPeriodName] = useState('');
   const [isDeletePeriodModalOpen, setIsDeletePeriodModalOpen] = useState(false);
@@ -520,23 +517,15 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
 
     eventUpdates.timeline = newTimeline;
 
-    // Il goal e la reazione ⚽ vengono salvati con un'unica scrittura: il listener
-    // riceve un solo aggiornamento coerente e ReactionBurst può animare il pallone.
+    // Prima salviamo il goal; poi lo stesso percorso delle reazioni manuali
+    // incrementa reactions.⚽. Il listener realtime attiva l'animazione su tutti i client.
     const savePromise = delta > 0
       ? updateEventDataWithGoalReaction(event.id, eventUpdates)
       : updateEventData(event.id, eventUpdates);
 
-    if (delta > 0) {
-      // Sul dispositivo dell'amministratore non aspettiamo il cambio del contatore
-      // realtime per animare: il listener remoto resta invece il trigger degli spettatori.
-      savePromise
-        .then(() => setGoalAnimationTrigger(current => current + 1))
-        .catch(error => console.error('Impossibile aggiornare la partita:', error));
-    } else {
-      savePromise.catch(error => {
-        console.error('Impossibile aggiornare la partita:', error);
-      });
-    }
+    savePromise.catch(error => {
+      console.error('Impossibile aggiornare la partita:', error);
+    });
   };
 
   const deleteLog = (logId) => {
@@ -1266,13 +1255,6 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   animateOnCountChange={false}
                   onClick={() => {
                     addEmojiReaction(event.id, emoji)
-                      .then(() => {
-                        // Se l'admin seleziona manualmente ⚽, usa lo stesso trigger
-                        // locale del goal per evitare una doppia animazione del listener.
-                        if (isAdmin && emoji === '⚽') {
-                          setGoalAnimationTrigger(current => current + 1);
-                        }
-                      })
                       .catch(error => {
                         console.warn('Impossibile registrare la reazione:', error);
                       });
@@ -1292,7 +1274,6 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
           emoji={emoji}
           index={index}
           count={event.reactions?.[emoji] || 0}
-          trigger={isAdmin && emoji === '⚽' ? goalAnimationTrigger : null}
         />
       ))}
 

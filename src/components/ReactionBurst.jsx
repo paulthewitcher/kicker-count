@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 
 // Overlay globale: il portal evita che transform/overflow dei contenitori della
 // schermata partita blocchino o ritaglino gli elementi position: fixed.
-const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0, trigger = null }) {
+// Il contatore Firestore è l'unico trigger sia per i goal sia per i click manuali.
+const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 }) {
   const [particles, setParticles] = useState([]);
-  const animationValue = trigger ?? count;
+  const animationValue = count;
   const previousValue = useRef(animationValue);
   const timers = useRef([]);
 
