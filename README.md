@@ -112,3 +112,10 @@ I tab non selezionati usano lo stile antracite con testo bianco, coerente con il
 ## UI refinement (V17)
 - The team-swap control keeps its 40x40px touch area but has a transparent background and border, leaving only the swap icon visible on mobile.
 - The add-player control is slightly narrower (40x40px instead of 44x44px), and its plus icon is reduced one size step (20px to 16px).
+
+## Correzione animazione goal (V18)
+- Il dispositivo dell'amministratore attiva l'animazione ⚽ direttamente dopo la conferma del salvataggio del goal, senza dipendere dalla tempistica del listener `onSnapshot`.
+- Gli spettatori continuano a ricevere l'animazione tramite l'incremento condiviso `reactions.⚽` su Firestore.
+- La selezione manuale di ⚽ nella modale usa lo stesso trigger locale per l'amministratore; le altre emoji continuano a usare il contatore condiviso.
+- `ReactionBurst` viene renderizzato in un React portal su `document.body`: l'overlay non è più influenzato da `transform` o `overflow` dei contenitori della schermata partita.
+- Le particelle hanno un punto di partenza esplicito in basso al centro e un'animazione CSS globale con durata e traiettoria variabili.

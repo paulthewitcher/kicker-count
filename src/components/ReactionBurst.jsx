@@ -1,14 +1,20 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-// Livello persistente: continua a rilevare le reazioni anche quando la modale viene chiusa.
-const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 }) {
+// Overlay globale: il portal evita che transform/overflow dei contenitori della
+// schermata partita blocchino o ritaglino gli elementi position: fixed.
+const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0, trigger = null }) {
   const [particles, setParticles] = useState([]);
-  const previousCount = useRef(count);
+  const animationValue = trigger ?? count;
+  const previousValue = useRef(animationValue);
   const timers = useRef([]);
 
   useEffect(() => {
-    if (count > previousCount.current) {
-      const bursts = Math.min(count - previousCount.current, 3);
+    const previous = Number(previousValue.current) || 0;
+    const current = Number(animationValue) || 0;
+
+    if (current > previous) {
+      const bursts = Math.min(current - previous, 3);
       const column = index % 5;
       const baseDrift = [160, 80, 0, -80, -160][column];
 
@@ -25,13 +31,14 @@ const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 
             rotation: (Math.random() - 0.5) * 80
           }));
 
-          setParticles(current => [...current, ...newParticles]);
+          setParticles(currentParticles => [...currentParticles, ...newParticles]);
 
           const cleanupTimer = setTimeout(() => {
-            setParticles(current => current.filter(
-              particle => !newParticles.some(created => created.id === particle.id)
+            const particleIds = new Set(newParticles.map(particle => particle.id));
+            setParticles(currentParticles => currentParticles.filter(
+              particle => !particleIds.has(particle.id)
             ));
-          }, 6500);
+          }, 6800);
           timers.current.push(cleanupTimer);
         }, burst * 120);
 
@@ -39,29 +46,38 @@ const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 
       }
     }
 
-    previousCount.current = count;
-  }, [count, emoji, index]);
+    previousValue.current = current;
+  }, [animationValue, emoji, index]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  return (
-    <div className="pointer-events-none fixed bottom-8 left-1/2 z-[60] h-0 w-0 overflow-visible">
-      {particles.map(particle => (
-        <span
-          key={particle.id}
-          className="absolute select-none text-3xl drop-shadow-md animate-instagram-float"
-          style={{
-            '--start-x': `${particle.startX}px`,
-            '--end-x': `${particle.endX}px`,
-            transform: `scale(${particle.scale}) rotate(${particle.rotation}deg)`,
-            animationDuration: `${particle.duration}s`,
-            animationDelay: `${particle.delay}s`
-          }}
-        >
-          {emoji}
-        </span>
-      ))}
-    </div>
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-[100] overflow-visible"
+    >
+      <div className="absolute bottom-8 left-1/2 h-0 w-0 overflow-visible">
+        {particles.map(particle => (
+          <span
+            key={particle.id}
+            className="absolute left-0 bottom-0 select-none drop-shadow-md animate-instagram-float"
+            style={{
+              '--start-x': `${particle.startX}px`,
+              '--end-x': `${particle.endX}px`,
+              '--particle-rotation': `${particle.rotation}deg`,
+              fontSize: `${1.75 * particle.scale}rem`,
+              animationDuration: `${particle.duration}s`,
+              animationDelay: `${particle.delay}s`
+            }}
+          >
+            {emoji}
+          </span>
+        ))}
+      </div>
+    </div>,
+    document.body
   );
 });
 

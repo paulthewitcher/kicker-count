@@ -2,29 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Animazione condivisa tra le reazioni e i goal: resta caricata anche quando
-   la modale delle emoji è chiusa. */
+/* Effetto condiviso tra reazioni e goal. I particles sono renderizzati in un
+   portal su document.body per non essere ritagliati dai contenitori della UI. */
 @keyframes instagramFloat {
   0% {
-    opacity: 1;
-    transform: translate(var(--start-x, 0px), 0px) scale(0.5) rotate(0deg);
+    opacity: 0;
+    transform: translate3d(var(--start-x, 0px), 0, 0) scale(0.55) rotate(0deg);
   }
-  15% {
+  12% {
     opacity: 1;
-    transform: translate(calc(var(--start-x, 0px) * 0.7 + var(--end-x, 0px) * 0.3), -200px) scale(1.1) rotate(20deg);
+    transform: translate3d(
+      calc(var(--start-x, 0px) * 0.7 + var(--end-x, 0px) * 0.3),
+      -12vh,
+      0
+    ) scale(1.05) rotate(18deg);
   }
   60% {
     opacity: 0.95;
-    transform: translate(calc(var(--start-x, 0px) * 0.3 + var(--end-x, 0px) * 0.7), -650px) scale(1.4) rotate(-20deg);
+    transform: translate3d(
+      calc(var(--start-x, 0px) * 0.3 + var(--end-x, 0px) * 0.7),
+      -62vh,
+      0
+    ) scale(1.25) rotate(-20deg);
   }
   100% {
     opacity: 0;
-    transform: translate(var(--end-x, 0px), -1050px) scale(0.8) rotate(30deg);
+    transform: translate3d(var(--end-x, 0px), -108vh, 0) scale(0.8) rotate(var(--particle-rotation, 30deg));
   }
 }
 
 .animate-instagram-float {
-  animation: instagramFloat cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  animation-name: instagramFloat;
+  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation-fill-mode: both;
   will-change: transform, opacity;
   transform-style: preserve-3d;
   backface-visibility: hidden;
