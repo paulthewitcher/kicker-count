@@ -8,13 +8,15 @@ import {
   ChevronUp,
   FilterX,
   Search,
+  Share2,
   Trophy
 } from 'lucide-react';
 import {
   buildPlayerReport,
   getAvailableReportPeriods,
   getReportableEvents,
-  getSelectedPeriodLabel
+  getSelectedPeriodLabel,
+  buildWhatsAppReportText
 } from '../utils/reportHelpers';
 
 const INITIAL_FILTERS = {
@@ -75,6 +77,18 @@ const ReportsView = memo(function ReportsView({ events, seed, goBack }) {
     if (comparison !== 0) return sort.direction === 'asc' ? comparison : -comparison;
     return a.name.localeCompare(b.name, 'it');
   }), [report.rows, sort]);
+
+  // L'export resta una classifica marcatori: ordina sempre per gol decrescenti,
+  // anche se nella tabella l'utente ha scelto un ordinamento diverso.
+  const exportRows = useMemo(() => [...report.rows].sort((a, b) => (
+    (Number(b.selectedGoals) || 0) - (Number(a.selectedGoals) || 0)
+      || a.name.localeCompare(b.name, 'it', { sensitivity: 'base' })
+  )), [report.rows]);
+
+  const shareReportOnWhatsApp = () => {
+    const text = buildWhatsAppReportText({ rows: exportRows, filters, selectedPeriodLabel });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  };
 
   const updateFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const resetFilters = () => {
@@ -250,12 +264,23 @@ const ReportsView = memo(function ReportsView({ events, seed, goBack }) {
             <h2 className="font-bold text-white flex items-center gap-2"><Trophy className="w-4 h-4 text-amber-400" /> Classifica marcatori</h2>
             <p className="text-[11px] text-slate-500 mt-0.5">{selectedPeriodLabel} · Tocca un giocatore per il dettaglio</p>
           </div>
-          <label className="shrink-0 text-[10px] text-slate-400">
-            <span className="sr-only">Ordina per</span>
-            <select value={sort.key} onChange={(e) => setSort({ key: e.target.value, direction: ['name', 'teams', 'jersey'].includes(e.target.value) ? 'asc' : 'desc' })} className="max-w-[132px] bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-white sm:hidden">
-              {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
+          <div className="shrink-0 flex items-center gap-2">
+            <label className="text-[10px] text-slate-400">
+              <span className="sr-only">Ordina per</span>
+              <select value={sort.key} onChange={(e) => setSort({ key: e.target.value, direction: ['name', 'teams', 'jersey'].includes(e.target.value) ? 'asc' : 'desc' })} className="max-w-[132px] bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-white sm:hidden">
+                {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={shareReportOnWhatsApp}
+              className="w-9 h-9 shrink-0 flex items-center justify-center bg-slate-900/60 text-slate-400 border border-slate-700 rounded-lg hover:bg-slate-700 hover:text-slate-200 transition-colors"
+              title="Condividi classifica su WhatsApp"
+              aria-label="Condividi classifica su WhatsApp"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {sortedRows.length === 0 ? (

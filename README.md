@@ -156,3 +156,10 @@ La normalizzazione usata per cercare non cambia automaticamente l'identità aggr
 - I marcatori sono aggregati per nome normalizzato (maiuscole/minuscole e spazi), perché non esiste un ID giocatore globale condiviso tra partite diverse. Due persone omonime possono quindi essere raggruppate.
 
 La struttura è verificata rispetto al codice applicativo; non è stata eseguita una lettura diretta del database Firebase remoto. Per certificare i dati storici è necessario confrontare un export anonimizzato di alcune partite reali, includendo una partita recente e una legacy. Non includere `deletePassword` o altri segreti nell'export.
+
+
+## Export classifica marcatori su WhatsApp
+
+Nella testata della sezione **Classifica marcatori** di Reports è disponibile un pulsante discreto di condivisione. L'export usa gli stessi filtri applicati alla ricerca e include un riepilogo dei filtri attivi (intervallo date, giocatore, maglia, squadra, evento, organizzatore, stato, periodo e intervallo gol).
+
+Il testo condiviso è ordinato sempre per gol selezionati in ordine decrescente, indipendentemente dall'ordinamento temporaneo scelto nella tabella. Il numero di maglia viene mostrato tra parentesi quando disponibile. La condivisione apre WhatsApp tramite `https://wa.me/` e non scrive dati aggiuntivi su Firestore.

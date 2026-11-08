@@ -11,7 +11,7 @@ export const TEAM_COLORS = [
   { name: 'Bianco', hex: '#f8fafc' }
 ];
 
-export const EMOJI_LIST = ['⚽', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳', '🥶', '🤯', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '🌈'];
+export const EMOJI_LIST = ['⚽️', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳', '🥶', '🤯', '😴', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '🌈'];
 
 // Pallino da usare nell'export WhatsApp in base al colore scelto per la squadra.
 // Rosa e celeste utilizzano il cerchio cromaticamente più vicino disponibile.

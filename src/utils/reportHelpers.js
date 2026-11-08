@@ -219,3 +219,71 @@ export const getSelectedPeriodLabel = (periodFilter, specialPeriods = []) => {
   const selected = specialPeriods.find((period) => `name:${period.key}` === periodFilter);
   return selected ? `Gol: ${selected.name}` : 'Gol nei tempi numerici';
 };
+
+
+const formatReportFilterDate = (value) => {
+  if (!value) return '';
+  const parts = String(value).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(value);
+};
+
+const getReportPeriodExportLabel = (periodFilter, selectedPeriodLabel) => {
+  if (periodFilter === 'regular') return 'Tempi numerici (Totale)';
+  if (periodFilter === 'special') return 'Tempi speciali';
+  if (periodFilter === 'all') return 'Tutti i tempi';
+  return String(selectedPeriodLabel || '').replace(/^Gol:\s*/i, '') || 'Tempo selezionato';
+};
+
+// Costruisce il testo WhatsApp utilizzando esattamente le righe già filtrate
+// e ordinate dalla tabella Reports.
+export const buildWhatsAppReportText = ({ rows = [], filters = {}, selectedPeriodLabel = '' } = {}) => {
+  const filterLines = [];
+  if (filters.dateFrom || filters.dateTo) {
+    const from = formatReportFilterDate(filters.dateFrom);
+    const to = formatReportFilterDate(filters.dateTo);
+    if (from && to) filterLines.push(`Date partita: ${from} – ${to}`);
+    else if (from) filterLines.push(`Data partita da: ${from}`);
+    else filterLines.push(`Data partita a: ${to}`);
+  }
+  if (String(filters.player || '').trim()) filterLines.push(`Giocatore: ${String(filters.player).trim()}`);
+  if (String(filters.jersey || '').trim()) filterLines.push(`Numero maglia: ${String(filters.jersey).trim()}`);
+  if (String(filters.team || '').trim()) filterLines.push(`Squadra: ${String(filters.team).trim()}`);
+  if (String(filters.title || '').trim()) filterLines.push(`Evento: ${String(filters.title).trim()}`);
+  if (String(filters.host || '').trim()) filterLines.push(`Organizzatore: ${String(filters.host).trim()}`);
+  if (filters.status && filters.status !== 'all') {
+    filterLines.push(`Stato: ${filters.status === 'ended' ? 'Terminate' : filters.status === 'live' ? 'In corso' : String(filters.status)}`);
+  }
+
+  // Il periodo è sempre indicato: anche senza una scelta esplicita, Reports
+  // parte dai tempi numerici e lascia fuori Rigori/Extra time.
+  filterLines.push(`Periodo: ${getReportPeriodExportLabel(filters.period, selectedPeriodLabel)}`);
+
+  const minGoals = filters.minGoals === '' || filters.minGoals == null ? null : Number(filters.minGoals);
+  const maxGoals = filters.maxGoals === '' || filters.maxGoals == null ? null : Number(filters.maxGoals);
+  if (minGoals !== null || maxGoals !== null) {
+    if (minGoals !== null && maxGoals !== null) filterLines.push(`Gol per giocatore: ${minGoals} – ${maxGoals}`);
+    else if (minGoals !== null) filterLines.push(`Gol minimi per giocatore: ${minGoals}`);
+    else filterLines.push(`Gol massimi per giocatore: ${maxGoals}`);
+  }
+
+  const lines = [
+    '🏆 *Classifica marcatori*',
+    '',
+    '*Filtri applicati:*',
+    ...filterLines.map((line) => `• ${line}`),
+    '',
+    '*Marcatori:*'
+  ];
+
+  if (!rows.length) {
+    lines.push('Nessun marcatore trovato.');
+  } else {
+    rows.forEach((row, index) => {
+      const jerseys = (row.jerseys || []).filter(Boolean);
+      const jerseyLabel = jerseys.length ? ` (#${jerseys.join(', #')})` : '';
+      lines.push(`${index + 1}. ${row.name}${jerseyLabel}: ${Number(row.selectedGoals) || 0} gol`);
+    });
+  }
+
+  return lines.join('\n');
+};
