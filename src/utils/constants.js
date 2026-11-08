@@ -11,7 +11,28 @@ export const TEAM_COLORS = [
   { name: 'Bianco', hex: '#f8fafc' }
 ];
 
+// Emoji canonica per il goal. La variante legacy senza variation selector viene
+// ancora letta per non perdere i contatori già presenti in Firestore.
+export const GOAL_REACTION_EMOJI = '⚽️';
+export const LEGACY_GOAL_REACTION_EMOJI = '⚽';
+
 export const EMOJI_LIST = ['⚽️', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳', '🥶', '🤯', '😴', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '🌈'];
+
+export const normalizeReactionEmoji = (emoji) => (
+  emoji === GOAL_REACTION_EMOJI || emoji === LEGACY_GOAL_REACTION_EMOJI
+    ? GOAL_REACTION_EMOJI
+    : emoji
+);
+
+export const getEmojiReactionCount = (reactions, emoji) => {
+  if (emoji === GOAL_REACTION_EMOJI || emoji === LEGACY_GOAL_REACTION_EMOJI) {
+    // I conteggi precedenti usavano "⚽" senza U+FE0F. Sommiamo entrambi i
+    // campi durante la migrazione soft, senza richiedere modifiche al database.
+    return (Number(reactions?.[GOAL_REACTION_EMOJI]) || 0)
+      + (Number(reactions?.[LEGACY_GOAL_REACTION_EMOJI]) || 0);
+  }
+  return Number(reactions?.[emoji]) || 0;
+};
 
 // Pallino da usare nell'export WhatsApp in base al colore scelto per la squadra.
 // Rosa e celeste utilizzano il cerchio cromaticamente più vicino disponibile.

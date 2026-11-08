@@ -1,3 +1,4 @@
+import { GOAL_REACTION_EMOJI, normalizeReactionEmoji } from '../utils/constants';
 import { db, appId } from './firebase';
 import { 
   collection, 
@@ -145,13 +146,17 @@ export const updateEventData = async (eventId, newData) => {
   await trackEventWrite(eventId, writePromise);
 };
 
-// Registra prima il goal, poi incrementa la reazione ⚽ usando ESATTAMENTE
-// la stessa funzione richiamata dal click manuale sull'emoji nella modale.
-// L'animazione di tutti i client dipende soltanto dal contatore Firestore:
-// niente trigger locali separati e nessuna doppia animazione per l'admin.
+// Goal e reazione pallone vengono scritti in UN SOLO update Firestore.
+// Il listener realtime riceve così il nuovo conteggio nello stesso snapshot
+// del goal, evitando race tra due scritture e mantenendo un unico trigger
+// condiviso per amministratore e spettatori.
 export const updateEventDataWithGoalReaction = async (eventId, newData) => {
-  await updateEventData(eventId, newData);
-  await addEmojiReaction(eventId, '⚽');
+  const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  const writePromise = updateDoc(eventRef, {
+    ...newData,
+    [`reactions.${GOAL_REACTION_EMOJI}`]: increment(1)
+  });
+  await trackEventWrite(eventId, writePromise);
 };
 
 // Scambia le due squadre senza ricostruirne i dati. La transazione legge sempre
@@ -205,8 +210,9 @@ export const deleteEvent = async (eventId) => {
 
 export const addEmojiReaction = async (eventId, type) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  const canonicalEmoji = normalizeReactionEmoji(type);
   await updateDoc(eventRef, {
-    [`reactions.${type}`]: increment(1)
+    [`reactions.${canonicalEmoji}`]: increment(1)
   });
 };
 

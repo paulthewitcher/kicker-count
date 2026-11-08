@@ -163,3 +163,14 @@ La struttura è verificata rispetto al codice applicativo; non è stata eseguita
 Nella testata della sezione **Classifica marcatori** di Reports è disponibile un pulsante discreto di condivisione. L'export usa gli stessi filtri applicati alla ricerca e include un riepilogo dei filtri attivi (intervallo date, giocatore, maglia, squadra, evento, organizzatore, stato, periodo e intervallo gol).
 
 Il testo condiviso è ordinato sempre per gol selezionati in ordine decrescente, indipendentemente dall'ordinamento temporaneo scelto nella tabella. Il numero di maglia viene mostrato tra parentesi quando disponibile. La condivisione apre WhatsApp tramite `https://wa.me/` e non scrive dati aggiuntivi su Firestore.
+
+## Correzioni V23 – animazione goal, emoji e date export
+
+- L'emoji pallone usa ora un'unica chiave canonica (`⚽️`, con variation selector) sia per il click manuale sia per l'assegnazione di un goal.
+- Il salvataggio dei dati del goal e l'incremento di `reactions.⚽️` avvengono con un'unica scrittura Firestore. Il listener realtime riceve quindi il nuovo contatore nello stesso snapshot e `ReactionBurst` attiva l'animazione per amministratore e spettatori.
+- La lettura dei contatori somma anche il vecchio campo `reactions.⚽` (senza variation selector), così i conteggi esistenti non vengono persi e non serve migrare Firestore.
+- La lista emoji è stata aggiornata alle 20 voci richieste, inclusa 😴.
+- L'export WhatsApp della partita aggiunge sotto il titolo la data del primo goal registrato (`dd-mm-yyyy`); se il risultato complessivo è ancora 0-0, usa `createdAt`.
+- Per la data del primo goal vengono controllati `goalHistory` e `timeline`, con esclusione dei goal annullati quando l'annullamento è tracciato.
+- L'export WhatsApp Reports mostra ora `⚽️ *Marcatori:*` prima della classifica.
+- Nessuna migrazione o modifica ai documenti Firebase è richiesta.

@@ -4,7 +4,7 @@ import {
   Clock, Trash2, Check, RotateCcw, Smile, X, Lock, Pencil,
   Save, ArrowLeftRight
 } from 'lucide-react';
-import { EMOJI_LIST, OPERA_GOAL_TEMPLATES, getTeamColorEmoji } from '../utils/constants';
+import { EMOJI_LIST, OPERA_GOAL_TEMPLATES, getTeamColorEmoji, getEmojiReactionCount } from '../utils/constants';
 import {
   getSortedPlayers,
   getEventPeriods,
@@ -79,6 +79,79 @@ const normalizeMatchPeriods = (sourceEvent) => {
 const formatGoalDateTime = (date) => {
   const pad = value => String(value).padStart(2, '0');
   return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+const toTimestampMs = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (value && typeof value.toMillis === 'function') return value.toMillis();
+  if (value && typeof value.toDate === 'function') return value.toDate().getTime();
+  if (value && typeof value.seconds === 'number') return value.seconds * 1000;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value).getTime();
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const parseItalianDateTime = (value) => {
+  const match = String(value || '').trim().match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
+  if (!match) return null;
+  const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes), Number(seconds));
+  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : null;
+};
+
+const formatShareDate = (timestamp) => {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = value => String(value).padStart(2, '0');
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
+};
+
+// Data dell'export: primo goal registrato se il risultato attuale non è 0-0;
+// altrimenti data di creazione dell'evento. Legge sia goalHistory sia timeline
+// per mantenere la compatibilità con le partite meno recenti.
+const getEventShareDate = (event, teamA, teamB, periods) => {
+  const currentScoreA = getTeamTotalScore(teamA, periods);
+  const currentScoreB = getTeamTotalScore(teamB, periods);
+  const isStillZeroZero = currentScoreA === 0 && currentScoreB === 0;
+
+  if (isStillZeroZero) {
+    const createdAt = toTimestampMs(event.createdAt);
+    return createdAt ? formatShareDate(createdAt) : '';
+  }
+
+  const goalTimestamps = [];
+  const cancelledGoalIds = new Set(
+    (event.timeline || [])
+      .filter(log => log?.type === 'undo' && log.undoesGoalId)
+      .map(log => log.undoesGoalId)
+  );
+  const goalHistoryById = new Map();
+
+  (event.teams || []).forEach(team => {
+    (team.players || []).forEach(player => {
+      (player.goalHistory || []).forEach(goal => {
+        if (goal.id) goalHistoryById.set(goal.id, goal);
+        if (goal.status === 'cancelled' || (goal.id && cancelledGoalIds.has(goal.id))) return;
+        const timestamp = toTimestampMs(goal.timestamp) ?? parseItalianDateTime(goal.dateTime);
+        if (timestamp !== null) goalTimestamps.push(timestamp);
+      });
+    });
+  });
+
+  (event.timeline || []).forEach(log => {
+    if (log?.type !== 'goal') return;
+    const historyRecord = log.goalRecordId ? goalHistoryById.get(log.goalRecordId) : null;
+    if (historyRecord?.status === 'cancelled' || (log.goalRecordId && cancelledGoalIds.has(log.goalRecordId))) return;
+    const timestamp = toTimestampMs(log.timestamp) ?? parseItalianDateTime(log.dateTime);
+    if (timestamp !== null) goalTimestamps.push(timestamp);
+  });
+
+  const firstGoalTimestamp = goalTimestamps.length ? Math.min(...goalTimestamps) : null;
+  const fallbackTimestamp = toTimestampMs(event.createdAt);
+  return formatShareDate(firstGoalTimestamp ?? fallbackTimestamp);
 };
 
 const getPeriodShareName = (period) => {
@@ -517,8 +590,8 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
 
     eventUpdates.timeline = newTimeline;
 
-    // Prima salviamo il goal; poi lo stesso percorso delle reazioni manuali
-    // incrementa reactions.⚽. Il listener realtime attiva l'animazione su tutti i client.
+    // Il goal e la reaction ⚽️ vengono salvati atomicamente: il listener
+    // realtime riceve un solo snapshot e attiva l'animazione su tutti i client.
     const savePromise = delta > 0
       ? updateEventDataWithGoalReaction(event.id, eventUpdates)
       : updateEventData(event.id, eventUpdates);
@@ -540,7 +613,10 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     const teamA = messageEvent.teams[0];
     const teamB = messageEvent.teams[1];
 
-    let text = `🏆 *${event.title}*\n\n`;
+    const eventShareDate = getEventShareDate(event, teamA, teamB, currentPeriods);
+    let text = `🏆 *${event.title}*\n`;
+    if (eventShareDate) text += `📅 ${eventShareDate}\n`;
+    text += '\n';
     const teamAIcon = getTeamColorEmoji(teamA.color || '#ef4444');
     const teamBIcon = getTeamColorEmoji(teamB.color || '#174195');
 
@@ -1251,7 +1327,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   key={emoji}
                   emoji={emoji}
                   index={index}
-                  count={event.reactions?.[emoji] || 0}
+                  count={getEmojiReactionCount(event.reactions, emoji)}
                   animateOnCountChange={false}
                   onClick={() => {
                     addEmojiReaction(event.id, emoji)
@@ -1273,7 +1349,7 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
           key={emoji}
           emoji={emoji}
           index={index}
-          count={event.reactions?.[emoji] || 0}
+          count={getEmojiReactionCount(event.reactions, emoji)}
         />
       ))}
 

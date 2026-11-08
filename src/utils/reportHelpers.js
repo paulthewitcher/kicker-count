@@ -272,7 +272,7 @@ export const buildWhatsAppReportText = ({ rows = [], filters = {}, selectedPerio
     '*Filtri applicati:*',
     ...filterLines.map((line) => `• ${line}`),
     '',
-    '*Marcatori:*'
+    '⚽️ *Marcatori:*'
   ];
 
   if (!rows.length) {
