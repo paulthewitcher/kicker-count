@@ -63,7 +63,7 @@ const Header = memo(function Header({
           <div className="justify-self-end">{profileButton}</div>
         </div>
       ) : (
-        <div className="max-w-xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+        <div className={`${view === 'REPORTS' ? 'max-w-6xl' : 'max-w-xl'} mx-auto px-4 h-16 flex items-center justify-between gap-3`}>
           <div className="flex items-center gap-3 min-w-0">
             {brand}
             {seedButton}

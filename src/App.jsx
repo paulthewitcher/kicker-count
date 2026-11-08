@@ -11,6 +11,7 @@ import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
 import CreateMatchView from './views/CreateMatchView';
 import EventView from './views/EventView';
+import ReportsView from './views/ReportsView';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -136,7 +137,7 @@ export default function App() {
         onBackFromEvent={() => setView('DASHBOARD')}
       />
 
-      <main className="max-w-xl mx-auto p-4 pb-24">
+      <main className={`${view === 'REPORTS' ? 'max-w-6xl' : 'max-w-xl'} mx-auto w-full p-4 pb-24`}>
         {view === 'LOGIN' && (
           <LoginView 
             nickname={nickname} 
@@ -152,7 +153,8 @@ export default function App() {
             events={events} 
             seed={seed}
             user={user}
-            goToCreate={() => setView('CREATE')} 
+            goToCreate={() => setView('CREATE')}
+            goToReports={() => setView('REPORTS')} 
             openEvent={(id) => {
               setCurrentEventId(id);
               setView('EVENT');
@@ -162,6 +164,14 @@ export default function App() {
                 setDeleteEventModal({ isOpen: true, event });
               }
             }}
+          />
+        )}
+
+        {view === 'REPORTS' && (
+          <ReportsView
+            events={events}
+            seed={seed}
+            goBack={() => setView('DASHBOARD')}
           />
         )}
 

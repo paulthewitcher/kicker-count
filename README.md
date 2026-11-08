@@ -127,3 +127,32 @@ I tab non selezionati usano lo stile antracite con testo bianco, coerente con il
 - `ReactionBurst` ascolta esclusivamente il contatore Firestore per tutte le persone, amministratore incluso: non esistono più trigger locali separati che possono divergere dal flusso delle reazioni.
 - La modale non genera una seconda animazione: il suo contatore resta disabilitato per l'animazione locale e l'overlay globale reagisce al singolo incremento condiviso.
 - Goal e reazione sono due scritture sequenziali: se il salvataggio del goal fallisce, la reazione non viene incrementata; se la reazione fallisce, il goal rimane salvato e l'errore viene riportato in console.
+
+## Reports
+
+La schermata Reports aggrega i marcatori delle partite già caricate per il Seed attivo. Non crea documenti Firestore aggiuntivi e non richiede indici o modifiche alle regole Firebase.
+
+Filtri disponibili: data di avvio della partita (da/a, estremi inclusi e interpretati nel fuso orario locale), giocatore, numero maglia, squadra, titolo evento, organizzatore, stato, tipo di tempo/tempo specifico e intervallo di gol.
+
+La data della partita è ricavata dal primo elemento `start` della `timeline`; per gli eventi precedenti che non hanno tale log viene usato `createdAt`. I conteggi vengono letti dalle mappe `goalsByPeriod`, con la compatibilità legacy già prevista dagli helper. Per impostazione iniziale vengono selezionati i tempi numerici, in coerenza con il tab `Totale`; i tempi testuali (ad esempio `Rigori` o `Extra time`) sono separati e possono essere inclusi o selezionati singolarmente.
+
+I risultati sono raggruppati per nome giocatore normalizzato (maiuscole/minuscole e spazi ignorati). Se nella stessa stanza esistono due persone diverse con lo stesso nome, il report le accorpa: per distinguerle in modo definitivo servirebbe in futuro un archivio anagrafico con un identificativo globale del giocatore. Il dettaglio espanso mostra le singole partite che contribuiscono al conteggio.
+
+I documenti di configurazione della stanza vengono esclusi dal report: sono analizzati soltanto i documenti che contengono esattamente due squadre con le rispettive liste giocatori. Campi tecnici come `deletePassword`, UID e ID interni non vengono mostrati né usati come filtri.
+
+
+## Reports — comportamento della ricerca (V21)
+
+I campi testuali liberi (giocatore, squadra, titolo evento, organizzatore e numero maglia) usano una ricerca parziale equivalente a `LIKE '%testo%'`, senza distinzione tra maiuscole/minuscole o lettere accentate. Gli spazi iniziali/finali vengono ignorati e gli spazi multipli vengono normalizzati. Il filtro Squadra è un campo di testo, non più una selezione esatta. Stato e tipo di tempo restano selettori perché rappresentano categorie predefinite.
+
+La normalizzazione usata per cercare non cambia automaticamente l'identità aggregata dei giocatori: due nomi che differiscono solo per un accento restano righe distinte. I nomi uguali ignorando maiuscole/minuscole e spazi continuano invece a essere raggruppati, come nella versione precedente.
+
+### Assunzioni dei dati Reports
+
+- La sottoscrizione carica i documenti della collection `artifacts/{appId}/public/data/events` e seleziona in memoria quelli con `seed` corrispondente (oppure, per i documenti legacy, ID documento corrispondente).
+- Un documento è considerato partita se contiene esattamente due squadre; il documento della stanza/Seed, privo di `teams`, viene escluso.
+- La data della partita è il timestamp del primo log `timeline` di tipo `start`; in mancanza, viene usato `createdAt`. Sono supportati millisecondi numerici, Date, Firestore Timestamp e stringhe data parsabili.
+- I gol sono conteggiati da `goalsByPeriod`; per i documenti legacy senza questa mappa viene usato `goals` nel primo periodo. `goalHistory` non viene sommato per evitare doppi conteggi.
+- I marcatori sono aggregati per nome normalizzato (maiuscole/minuscole e spazi), perché non esiste un ID giocatore globale condiviso tra partite diverse. Due persone omonime possono quindi essere raggruppate.
+
+La struttura è verificata rispetto al codice applicativo; non è stata eseguita una lettura diretta del database Firebase remoto. Per certificare i dati storici è necessario confrontare un export anonimizzato di alcune partite reali, includendo una partita recente e una legacy. Non includere `deletePassword` o altri segreti nell'export.
