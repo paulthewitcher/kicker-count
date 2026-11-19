@@ -6,13 +6,21 @@ import { createPortal } from 'react-dom';
 // Il contatore Firestore è l'unico trigger sia per i goal sia per i click manuali.
 const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 }) {
   const [particles, setParticles] = useState([]);
-  const animationValue = count;
-  const previousValue = useRef(animationValue);
-  const timers = useRef([]);
+  const previousValue = useRef(Number(count) || 0);
+  const timers = useRef(new Set());
 
   useEffect(() => {
     const previous = Number(previousValue.current) || 0;
-    const current = Number(animationValue) || 0;
+    const current = Number(count) || 0;
+
+    const schedule = (callback, delay) => {
+      const timerId = setTimeout(() => {
+        timers.current.delete(timerId);
+        callback();
+      }, delay);
+      timers.current.add(timerId);
+      return timerId;
+    };
 
     if (current > previous) {
       const bursts = Math.min(current - previous, 3);
@@ -20,7 +28,7 @@ const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 
       const baseDrift = [160, 80, 0, -80, -160][column];
 
       for (let burst = 0; burst < bursts; burst += 1) {
-        const timer = setTimeout(() => {
+        schedule(() => {
           const burstId = `${Date.now()}-${Math.random()}`;
           const newParticles = Array.from({ length: 25 }, (_, particleIndex) => ({
             id: `${burstId}-${particleIndex}`,
@@ -33,24 +41,23 @@ const ReactionBurst = memo(function ReactionBurst({ emoji, index = 0, count = 0 
           }));
 
           setParticles(currentParticles => [...currentParticles, ...newParticles]);
-
-          const cleanupTimer = setTimeout(() => {
-            const particleIds = new Set(newParticles.map(particle => particle.id));
+          const particleIds = new Set(newParticles.map(particle => particle.id));
+          schedule(() => {
             setParticles(currentParticles => currentParticles.filter(
               particle => !particleIds.has(particle.id)
             ));
           }, 6800);
-          timers.current.push(cleanupTimer);
         }, burst * 120);
-
-        timers.current.push(timer);
       }
     }
 
     previousValue.current = current;
-  }, [animationValue, emoji, index]);
+  }, [count, emoji, index]);
 
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout);
+    timers.current.clear();
+  }, []);
 
   if (typeof document === 'undefined') return null;
 

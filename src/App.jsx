@@ -193,6 +193,7 @@ export default function App() {
           <EventView 
             event={currentEvent} 
             user={user} 
+            nickname={nickname}
             goBack={() => setView('DASHBOARD')} 
           />
         )}

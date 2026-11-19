@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /artifacts/kicker-app-id/public/data/events/{eventId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isMatchDocument(data) {
+        return ('teams' in data)
+          && data.teams is list
+          && data.teams.size() == 2;
+      }
+
+      function isEventOwner() {
+        return isSignedIn()
+          && ('adminId' in resource.data)
+          && resource.data.adminId == request.auth.uid
+          && isMatchDocument(resource.data);
+      }
+
+      function isOwnerUpdate() {
+        return isEventOwner()
+          && request.resource.data.adminId == resource.data.adminId
+          && isMatchDocument(request.resource.data);
+      }
+
+      function isReactionOnlyUpdate() {
+        return isSignedIn()
+          && isMatchDocument(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          && ('reactions' in request.resource.data)
+          && request.resource.data.reactions is map;
+      }
+
+      // La V24/V25 continua a leggere la collection e filtrare il Seed nel client.
+      allow get, list: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.adminId == request.auth.uid
+        && request.resource.data.seed is string
+        && request.resource.data.seed.size() > 0
+        && isMatchDocument(request.resource.data);
+
+      allow update: if isOwnerUpdate() || isReactionOnlyUpdate();
+      allow delete: if isEventOwner();
+
+      // I log delle reazioni sono separati dalla timeline ufficiale.
+      // Gli utenti autenticati possono leggerli e crearli per la partita;
+      // soltanto l'amministratore della partita può cancellarli.
+      match /reactionLogs/{reactionId} {
+        function parentEventPath() {
+          return /databases/$(database)/documents/artifacts/kicker-app-id/public/data/events/$(eventId);
+        }
+
+        function parentEventExists() {
+          return exists(parentEventPath());
+        }
+
+        function isParentEventAdmin() {
+          return request.auth != null
+            && get(parentEventPath()).data.adminId == request.auth.uid;
+        }
+
+        allow get, list: if request.auth != null && parentEventExists();
+
+        allow create: if request.auth != null
+          && parentEventExists()
+          && get(parentEventPath()).data.adminId is string
+          && get(parentEventPath()).data.teams is list
+          && get(parentEventPath()).data.teams.size() == 2
+          && request.resource.data.keys().hasOnly(['uid', 'nickname', 'emoji', 'timestamp', 'time'])
+          && request.resource.data.keys().hasAll(['uid', 'nickname', 'emoji', 'timestamp', 'time'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.nickname is string
+          && request.resource.data.nickname.size() > 0
+          && request.resource.data.nickname.size() <= 15
+          && request.resource.data.emoji in [
+            '⚽️', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳',
+            '🥶', '🤯', '😴', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '🌈'
+          ]
+          && request.resource.data.timestamp is int
+          && request.resource.data.time is string
+          && request.resource.data.time.size() <= 16;
+
+        allow update: if false;
+        allow delete: if isParentEventAdmin();
+      }
+    }
+  }
+}

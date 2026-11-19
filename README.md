@@ -174,3 +174,51 @@ Il testo condiviso è ordinato sempre per gol selezionati in ordine decrescente,
 - Per la data del primo goal vengono controllati `goalHistory` e `timeline`, con esclusione dei goal annullati quando l'annullamento è tracciato.
 - L'export WhatsApp Reports mostra ora `⚽️ *Marcatori:*` prima della classifica.
 - Nessuna migrazione o modifica ai documenti Firebase è richiesta.
+
+## Consolidamento V24 – registrazione atomica dei goal e coerenza timestamp
+
+Questa versione consolida i flussi più delicati dell'applicazione:
+
+- L'assegnazione e l'annullamento di un goal vengono calcolati sulla versione più recente del documento attraverso una transazione Firestore. L'aggiornamento include giocatore, `goalsByPeriod`, `goalHistory`, `timeline` e, quando si aggiunge un goal, il contatore canonico `reactions.⚽️`.
+- Le squadre vengono individuate tramite ID stabile, non soltanto tramite posizione nell'array: uno scambio casa/trasferta contemporaneo al click non attribuisce il goal alla squadra sbagliata.
+- Le reazioni Emoji manuali incrementano la mappa `reactions` con una transazione, preservando gli altri contatori e normalizzando `⚽` e `⚽️` sulla chiave canonica.
+- `ReactionBurst` mantiene i timer delle particelle tra un aggiornamento del contatore e il successivo e li cancella soltanto allo smontaggio del componente. Questo evita che una reazione ravvicinata cancelli prematuramente il timer che rimuove le particelle precedenti.
+- I timestamp sono normalizzati in un helper condiviso: supporta millisecondi, `Date`, Firestore `Timestamp`, oggetti Timestamp serializzati e stringhe data. La stessa conversione è usata per ordinamento della bacheca, formattazione delle date e Reports.
+- La bacheca esclude dalla lista i documenti di configurazione della stanza, che non contengono le due squadre della partita.
+- La data nell'export dell'evento considera il primo goal attivo in qualunque tempo, inclusi i tempi testuali; se non risultano goal attivi usa `createdAt`.
+- La cancellazione di un tempo rilegge e aggiorna il documento in una transazione dopo il controllo password, riducendo il rischio di perdere un goal registrato nello stesso momento.
+
+### Test automatici senza dipendenze aggiuntive
+
+Eseguire:
+
+```bash
+npm run test:core
+```
+
+I test verificano: chiave Emoji canonica e contatori legacy, aggiunta/annullamento goal, storico, reazione atomica, tempi numerici e speciali, verifica dell'amministratore, risoluzione della squadra tramite ID dopo lo scambio, conversione Firestore Timestamp, filtri Reports, ricerca senza distinzione di maiuscole/accenti ed export WhatsApp.
+
+La build Vite completa deve comunque essere eseguita da un ambiente che possa installare le dipendenze. Durante il consolidamento l'accesso a `registry.npmjs.org` dall'ambiente di lavoro ha restituito `EAI_AGAIN`; perciò non è stato possibile certificare qui il bundle Vite né un deployment Vercel. Il repository continua a non includere il vecchio `package-lock.json` incoerente; `.npmrc` mantiene abilitate le dipendenze opzionali richieste da Rollup.
+
+
+## Cronologia delle reazioni (V25)
+
+Le reazioni manuali inviate dagli spettatori sono registrate nella sottocollection:
+
+`artifacts/kicker-app-id/public/data/events/{eventId}/reactionLogs/{reactionId}`
+
+Ogni documento contiene UID Firebase, nickname scelto dall'utente, emoji, timestamp e orario locale. La reazione e l'incremento del contatore vengono salvati nella stessa transazione Firestore. La cronologia dell'interfaccia fonde questi documenti con la `timeline` ufficiale senza consentire agli spettatori di modificare i log dei gol o lo stato della partita.
+
+Le reazioni ripetute dello stesso utente con la stessa emoji entro 60 secondi, se consecutive nella cronologia, vengono raggruppate in una sola voce visuale; i singoli click rimangono comunque registrati separatamente.
+
+**Importante per Firestore:** la V25 richiede le regole aggiornate nel file `firestore.rules`, che autorizzano la lettura/creazione dei log da parte degli utenti autenticati e la cancellazione soltanto all'amministratore della partita. Pubblica questo file in Firebase Console → Firestore Database → Rules prima di testare le reazioni se hai già sostituito le regole test con quelle restrittive della V24.
+
+Il nickname è quello scelto nel form di accesso: Firebase Anonymous Authentication verifica l'UID del client, ma non certifica il nome visualizzato.
+
+
+## Correzione V26 — emoji goal riservata a Opera
+
+- L'incremento automatico dell'emoji pallone `⚽️` avviene soltanto quando il nome della squadra è esattamente `Opera`, senza distinzione tra maiuscole/minuscole e ignorando spazi iniziali/finali.
+- Le squadre con qualsiasi altro nome registrano normalmente il goal, ma non attivano la reazione automatica del pallone.
+- Le reazioni emoji manuali degli utenti restano disponibili per tutte le squadre e non sono state modificate.
+- Nessuna modifica a Firestore, alle regole di sicurezza o alla struttura dei documenti.

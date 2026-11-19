@@ -1,4 +1,6 @@
-import { GOAL_REACTION_EMOJI, normalizeReactionEmoji } from '../utils/constants';
+import { normalizeReactionEmoji } from '../utils/constants';
+import { toTimestampMs } from '../utils/helpers';
+import { buildPlayerGoalUpdate } from '../utils/goalUpdates';
 import { db, appId } from './firebase';
 import { 
   collection, 
@@ -7,10 +9,11 @@ import {
   setDoc, 
   updateDoc, 
   deleteDoc, 
-  increment, 
-  getDoc, 
+  getDoc,
+  getDocs,
+  writeBatch,
   arrayUnion,
-  runTransaction 
+  runTransaction
 } from 'firebase/firestore';
 
 export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
@@ -23,12 +26,18 @@ export const subscribeToEvents = (seed, onEventsUpdate, onError) => {
       // Nei documenti legacy il Seed può coincidere con il document ID e
       // il campo `seed` può non essere presente.
       .map(docSnap => ({ ...docSnap.data(), id: docSnap.id }))
-      .filter(evt => String(evt.seed || evt.id || '').trim().toLowerCase() === cleanSeed);
+      .filter(evt => (
+        String(evt.seed || evt.id || '').trim().toLowerCase() === cleanSeed
+        && Array.isArray(evt.teams)
+        && evt.teams.length === 2
+      ));
 
     fetchedEvents.sort((a, b) => {
       if (a.status === 'live' && b.status !== 'live') return -1;
       if (a.status !== 'live' && b.status === 'live') return 1;
-      return b.createdAt - a.createdAt;
+      const aCreatedAt = toTimestampMs(a.createdAt) ?? 0;
+      const bCreatedAt = toTimestampMs(b.createdAt) ?? 0;
+      return bCreatedAt - aCreatedAt || String(a.id).localeCompare(String(b.id));
     });
 
     onEventsUpdate(fetchedEvents);
@@ -146,17 +155,42 @@ export const updateEventData = async (eventId, newData) => {
   await trackEventWrite(eventId, writePromise);
 };
 
-// Goal e reazione pallone vengono scritti in UN SOLO update Firestore.
-// Il listener realtime riceve così il nuovo conteggio nello stesso snapshot
-// del goal, evitando race tra due scritture e mantenendo un unico trigger
-// condiviso per amministratore e spettatori.
-export const updateEventDataWithGoalReaction = async (eventId, newData) => {
+// Registra un goal/annullamento leggendo la versione più aggiornata del
+// documento. La transazione salva giocatori, timeline e reazione ⚽️ insieme:
+// click ravvicinati o due admin non possono sovrascrivere goal precedenti.
+export const recordPlayerGoal = async ({
+  eventId,
+  adminUid,
+  teamId,
+  teamIndex,
+  expectedTeamName,
+  playerId,
+  periodId,
+  delta
+}) => {
+  if (!eventId) throw new Error('Partita non specificata.');
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-  const writePromise = updateDoc(eventRef, {
-    ...newData,
-    [`reactions.${GOAL_REACTION_EMOJI}`]: increment(1)
+  const writePromise = runTransaction(db, async (transaction) => {
+    const eventSnap = await transaction.get(eventRef);
+    if (!eventSnap.exists()) throw new Error('Partita non trovata.');
+
+    const updates = buildPlayerGoalUpdate(eventSnap.data(), {
+      adminUid,
+      teamId,
+      teamIndex,
+      expectedTeamName,
+      playerId,
+      periodId,
+      delta
+    });
+
+    if (!updates) return false;
+    transaction.update(eventRef, updates);
+    return true;
   });
+
   await trackEventWrite(eventId, writePromise);
+  return writePromise;
 };
 
 // Scambia le due squadre senza ricostruirne i dati. La transazione legge sempre
@@ -205,15 +239,90 @@ export const swapEventTeams = async (eventId, adminUid) => {
 
 export const deleteEvent = async (eventId) => {
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  await deleteAllReactionLogs(eventId);
   await deleteDoc(eventRef);
 };
 
-export const addEmojiReaction = async (eventId, type) => {
+const reactionLogsCollection = (eventId) => collection(
+  db, 'artifacts', appId, 'public', 'data', 'events', eventId, 'reactionLogs'
+);
+
+// Registra una reazione come documento separato: gli spettatori non devono
+// poter modificare la timeline ufficiale (gol, tempi e stato partita).
+// L'incremento del contatore e il log sono atomici nella stessa transazione.
+export const addEmojiReaction = async (eventId, type, { userId, nickname } = {}) => {
+  if (!eventId) throw new Error('Partita non specificata.');
+  if (!userId) throw new Error('Utente non autenticato.');
+
   const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+  const reactionRef = doc(reactionLogsCollection(eventId));
   const canonicalEmoji = normalizeReactionEmoji(type);
-  await updateDoc(eventRef, {
-    [`reactions.${canonicalEmoji}`]: increment(1)
+  const now = new Date();
+  const safeNickname = String(nickname || 'Spettatore')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 15) || 'Spettatore';
+
+  const reactionLog = {
+    uid: userId,
+    nickname: safeNickname,
+    emoji: canonicalEmoji,
+    timestamp: now.getTime(),
+    time: now.toLocaleTimeString('it-IT', { hour12: false })
+  };
+
+  const writePromise = runTransaction(db, async (transaction) => {
+    const eventSnap = await transaction.get(eventRef);
+    if (!eventSnap.exists()) throw new Error('Partita non trovata.');
+    const reactions = { ...(eventSnap.data().reactions || {}) };
+    reactions[canonicalEmoji] = (Number(reactions[canonicalEmoji]) || 0) + 1;
+    transaction.update(eventRef, { reactions });
+    transaction.set(reactionRef, reactionLog);
   });
+
+  await trackEventWrite(eventId, writePromise);
+  return writePromise;
+};
+
+export const subscribeToReactionLogs = (eventId, callback, onError) => {
+  if (!eventId) return () => {};
+  return onSnapshot(reactionLogsCollection(eventId), (snapshot) => {
+    const logs = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id }));
+    callback(logs);
+  }, onError);
+};
+
+export const deleteReactionLogs = async (eventId, reactionIds) => {
+  const uniqueIds = [...new Set((reactionIds || []).filter(Boolean))];
+  if (!eventId || uniqueIds.length === 0) return;
+
+  // Manteniamo batch piccoli: le Security Rules verificano il proprietario
+  // del documento partita per ogni cancellazione della sottocollection.
+  for (let offset = 0; offset < uniqueIds.length; offset += 15) {
+    const batch = writeBatch(db);
+    uniqueIds.slice(offset, offset + 15).forEach(reactionId => {
+      batch.delete(doc(reactionLogsCollection(eventId), reactionId));
+    });
+    await batch.commit();
+  }
+};
+
+const deleteAllReactionLogs = async (eventId) => {
+  const logsRef = reactionLogsCollection(eventId);
+  // Firestore non elimina automaticamente le sottocollection del documento padre.
+  // Batch da 15 per restare conservativi rispetto ai limiti di accesso delle Rules.
+  for (let pass = 0; pass < 10; pass += 1) {
+    const snapshot = await getDocs(logsRef);
+    if (snapshot.empty) return;
+
+    for (let offset = 0; offset < snapshot.docs.length; offset += 15) {
+      const batch = writeBatch(db);
+      snapshot.docs.slice(offset, offset + 15).forEach(logDoc => batch.delete(logDoc.ref));
+      await batch.commit();
+    }
+  }
+  throw new Error('Non è stato possibile completare la pulizia dei log di reazione. Riprova.');
 };
 
 // --- FIX AGGIUNTI PER RIPERDITA / LOG E ELIMINAZIONE VIA PASSWORD ---
@@ -323,6 +432,9 @@ export const deleteEventWithPassword = async (eventId, inputPassword, roomSeed) 
   const data = eventSnap.data();
   await assertDeletePassword(data, eventSnap.id, inputPassword, roomSeed);
 
+  // Firestore non elimina automaticamente le sottocollection quando si
+  // cancella il documento padre. Rimuoviamo prima i log delle reazioni.
+  await deleteAllReactionLogs(eventId);
   await deleteDoc(eventRef);
   return true;
 };
@@ -337,68 +449,71 @@ export const deletePeriodWithPassword = async (eventId, periodId, inputPassword,
     throw new Error('Partita non trovata.');
   }
 
-  const data = eventSnap.data();
-  await assertDeletePassword(data, eventSnap.id, inputPassword, roomSeed);
+  // La password è verificata sul documento stanza indicato dal Seed.
+  await assertDeletePassword(eventSnap.data(), eventSnap.id, inputPassword, roomSeed);
 
-  const periods = Array.isArray(data.periods)
-    ? data.periods
-    : [{ id: 'period-1', name: '1', number: 1 }];
+  // Rileggiamo il documento nella transazione per non cancellare eventuali
+  // goal arrivati mentre veniva controllata la password.
+  const writePromise = runTransaction(db, async (transaction) => {
+    const latestSnap = await transaction.get(eventRef);
+    if (!latestSnap.exists()) throw new Error('Partita non trovata.');
+    const data = latestSnap.data();
 
-  if (!periods.some(period => period.id === periodId)) {
-    throw new Error('Il tempo selezionato non esiste più.');
-  }
+    const periods = Array.isArray(data.periods)
+      ? data.periods
+      : [{ id: 'period-1', name: '1', number: 1 }];
 
-  const updatedPeriods = periods.filter(period => period.id !== periodId);
-  const numericPeriodIds = new Set(
-    updatedPeriods
-      .filter(period => /^\d+$/.test(String(period?.name ?? '').trim()))
-      .map(period => period.id)
-  );
-  const teams = (data.teams || []).map(team => {
-    const players = (team.players || []).map(player => {
-      const goalsByPeriod = player.goalsByPeriod
-        ? { ...player.goalsByPeriod }
-        : { 'period-1': Number(player.goals) || 0 };
-      const goalHistory = (player.goalHistory || []).filter(goal => goal.periodId !== periodId);
+    if (!periods.some(period => period.id === periodId)) {
+      throw new Error('Il tempo selezionato non esiste più.');
+    }
 
-      delete goalsByPeriod[periodId];
+    const updatedPeriods = periods.filter(period => period.id !== periodId);
+    const numericPeriodIds = new Set(
+      updatedPeriods
+        .filter(period => /^\d+$/.test(String(period?.name ?? '').trim()))
+        .map(period => period.id)
+    );
+    const teams = (data.teams || []).map(team => {
+      const players = (team.players || []).map(player => {
+        const goalsByPeriod = player.goalsByPeriod
+          ? { ...player.goalsByPeriod }
+          : { 'period-1': Number(player.goals) || 0 };
+        const goalHistory = (player.goalHistory || []).filter(goal => goal.periodId !== periodId);
 
-      const goals = [...numericPeriodIds].reduce(
-        (total, numericPeriodId) => total + (Number(goalsByPeriod[numericPeriodId]) || 0),
+        delete goalsByPeriod[periodId];
+        const goals = [...numericPeriodIds].reduce(
+          (total, numericPeriodId) => total + (Number(goalsByPeriod[numericPeriodId]) || 0),
+          0
+        );
+        return { ...player, goalsByPeriod, goals, goalHistory };
+      });
+
+      const scoreOffsetsByPeriod = team.scoreOffsetsByPeriod
+        ? { ...team.scoreOffsetsByPeriod }
+        : { 'period-1': Number(team.scoreOffset) || 0 };
+      delete scoreOffsetsByPeriod[periodId];
+      const scoreOffset = [...numericPeriodIds].reduce(
+        (total, numericPeriodId) => total + (Number(scoreOffsetsByPeriod[numericPeriodId]) || 0),
         0
       );
-
-      return { ...player, goalsByPeriod, goals, goalHistory };
+      return { ...team, players, scoreOffsetsByPeriod, scoreOffset };
     });
 
-    const scoreOffsetsByPeriod = team.scoreOffsetsByPeriod
-      ? { ...team.scoreOffsetsByPeriod }
-      : { 'period-1': Number(team.scoreOffset) || 0 };
+    const timeline = (data.timeline || []).filter(log => {
+      if (log.periodId) return log.periodId !== periodId;
+      // Nei vecchi eventi i log dei gol non avevano ancora un riferimento al tempo.
+      if (periodId === 'period-1' && (log.type === 'goal' || log.type === 'undo' || !log.type)) {
+        return false;
+      }
+      return true;
+    });
 
-    delete scoreOffsetsByPeriod[periodId];
-
-    const scoreOffset = [...numericPeriodIds].reduce(
-      (total, numericPeriodId) => total + (Number(scoreOffsetsByPeriod[numericPeriodId]) || 0),
-      0
-    );
-
-    return { ...team, players, scoreOffsetsByPeriod, scoreOffset };
+    const updates = { periods: updatedPeriods, teams, timeline };
+    transaction.update(eventRef, updates);
+    return updates;
   });
 
-  const timeline = (data.timeline || []).filter(log => {
-    if (log.periodId) return log.periodId !== periodId;
-    // Nei vecchi eventi i log dei gol non avevano ancora un riferimento al tempo.
-    if (periodId === 'period-1' && (log.type === 'goal' || log.type === 'undo' || !log.type)) {
-      return false;
-    }
-    return true;
-  });
-
-  await updateDoc(eventRef, {
-    periods: updatedPeriods,
-    teams,
-    timeline
-  });
-
-  return { periods: updatedPeriods, teams, timeline };
+  await trackEventWrite(eventId, writePromise);
+  return writePromise;
 };
+

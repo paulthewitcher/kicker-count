@@ -85,9 +85,29 @@ export const getSortedPlayers = (players, getGoals = (player) => Number(player.g
   return [...(players || [])].sort((a, b) => getGoals(b) - getGoals(a));
 };
 
-export const formatTimestamp = (ts) => {
-  if (!ts) return '';
-  const d = new Date(ts);
+export const toTimestampMs = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (value && typeof value.toMillis === 'function') return value.toMillis();
+  if (value && typeof value.toDate === 'function') return value.toDate().getTime();
+  if (value && typeof value.seconds === 'number') {
+    return value.seconds * 1000 + Math.floor((Number(value.nanoseconds) || 0) / 1e6);
+  }
+  if (value && typeof value._seconds === 'number') {
+    return value._seconds * 1000 + Math.floor((Number(value._nanoseconds) || 0) / 1e6);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+export const formatTimestamp = (value) => {
+  const timestamp = toTimestampMs(value);
+  if (timestamp === null) return '';
+  const d = new Date(timestamp);
+  if (!Number.isFinite(d.getTime())) return '';
   const pad = n => n.toString().padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };

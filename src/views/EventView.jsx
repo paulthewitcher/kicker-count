@@ -4,7 +4,7 @@ import {
   Clock, Trash2, Check, RotateCcw, Smile, X, Lock, Pencil,
   Save, ArrowLeftRight
 } from 'lucide-react';
-import { EMOJI_LIST, OPERA_GOAL_TEMPLATES, getTeamColorEmoji, getEmojiReactionCount } from '../utils/constants';
+import { EMOJI_LIST, getTeamColorEmoji, getEmojiReactionCount } from '../utils/constants';
 import {
   getSortedPlayers,
   getEventPeriods,
@@ -16,14 +16,18 @@ import {
 } from '../utils/helpers';
 import {
   updateEventData,
-  updateEventDataWithGoalReaction,
+  recordPlayerGoal,
   addEmojiReaction,
   subscribeToSingleEvent,
+  subscribeToReactionLogs,
+  deleteReactionLogs,
   deletePeriodWithPassword,
   swapEventTeams
 } from '../services/eventService';
 import ReactionButton from '../components/ReactionButton';
 import ReactionBurst from '../components/ReactionBurst';
+import { getReactionPhrase, mergeEventTimeline } from '../utils/reactionHelpers';
+import { getEventShareDate } from '../utils/eventShareHelpers';
 import AddPlayerModal from '../components/modals/AddPlayerModal';
 import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
@@ -76,84 +80,6 @@ const normalizeMatchPeriods = (sourceEvent) => {
   };
 };
 
-const formatGoalDateTime = (date) => {
-  const pad = value => String(value).padStart(2, '0');
-  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-};
-
-const toTimestampMs = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (value instanceof Date) return value.getTime();
-  if (value && typeof value.toMillis === 'function') return value.toMillis();
-  if (value && typeof value.toDate === 'function') return value.toDate().getTime();
-  if (value && typeof value.seconds === 'number') return value.seconds * 1000;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = new Date(value).getTime();
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-};
-
-const parseItalianDateTime = (value) => {
-  const match = String(value || '').trim().match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
-  if (!match) return null;
-  const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] = match;
-  const parsed = new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes), Number(seconds));
-  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : null;
-};
-
-const formatShareDate = (timestamp) => {
-  const date = new Date(timestamp);
-  if (!Number.isFinite(date.getTime())) return '';
-  const pad = value => String(value).padStart(2, '0');
-  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
-};
-
-// Data dell'export: primo goal registrato se il risultato attuale non è 0-0;
-// altrimenti data di creazione dell'evento. Legge sia goalHistory sia timeline
-// per mantenere la compatibilità con le partite meno recenti.
-const getEventShareDate = (event, teamA, teamB, periods) => {
-  const currentScoreA = getTeamTotalScore(teamA, periods);
-  const currentScoreB = getTeamTotalScore(teamB, periods);
-  const isStillZeroZero = currentScoreA === 0 && currentScoreB === 0;
-
-  if (isStillZeroZero) {
-    const createdAt = toTimestampMs(event.createdAt);
-    return createdAt ? formatShareDate(createdAt) : '';
-  }
-
-  const goalTimestamps = [];
-  const cancelledGoalIds = new Set(
-    (event.timeline || [])
-      .filter(log => log?.type === 'undo' && log.undoesGoalId)
-      .map(log => log.undoesGoalId)
-  );
-  const goalHistoryById = new Map();
-
-  (event.teams || []).forEach(team => {
-    (team.players || []).forEach(player => {
-      (player.goalHistory || []).forEach(goal => {
-        if (goal.id) goalHistoryById.set(goal.id, goal);
-        if (goal.status === 'cancelled' || (goal.id && cancelledGoalIds.has(goal.id))) return;
-        const timestamp = toTimestampMs(goal.timestamp) ?? parseItalianDateTime(goal.dateTime);
-        if (timestamp !== null) goalTimestamps.push(timestamp);
-      });
-    });
-  });
-
-  (event.timeline || []).forEach(log => {
-    if (log?.type !== 'goal') return;
-    const historyRecord = log.goalRecordId ? goalHistoryById.get(log.goalRecordId) : null;
-    if (historyRecord?.status === 'cancelled' || (log.goalRecordId && cancelledGoalIds.has(log.goalRecordId))) return;
-    const timestamp = toTimestampMs(log.timestamp) ?? parseItalianDateTime(log.dateTime);
-    if (timestamp !== null) goalTimestamps.push(timestamp);
-  });
-
-  const firstGoalTimestamp = goalTimestamps.length ? Math.min(...goalTimestamps) : null;
-  const fallbackTimestamp = toTimestampMs(event.createdAt);
-  return formatShareDate(firstGoalTimestamp ?? fallbackTimestamp);
-};
-
 const getPeriodShareName = (period) => {
   const name = String(period.name || '').trim();
   const periodNumber = Number(period.number) || Number.parseInt(name, 10);
@@ -171,8 +97,9 @@ const getPeriodShareName = (period) => {
   return ordinalNames[periodNumber] || `${periodNumber}° tempo`;
 };
 
-const EventView = memo(function EventView({ event: initialEvent, user }) {
+const EventView = memo(function EventView({ event: initialEvent, user, nickname }) {
   const [event, setEvent] = useState(initialEvent);
+  const [reactionLogs, setReactionLogs] = useState([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToSingleEvent(initialEvent.id, (updatedEvent) => {
@@ -181,6 +108,21 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
 
     return () => unsubscribe();
   }, [initialEvent.id]);
+
+  useEffect(() => {
+    setReactionLogs([]);
+    const unsubscribe = subscribeToReactionLogs(
+      initialEvent.id,
+      setReactionLogs,
+      (err) => console.warn('Impossibile sincronizzare le reazioni nella cronologia:', err)
+    );
+    return () => unsubscribe();
+  }, [initialEvent.id]);
+
+  const timelineEntries = useMemo(
+    () => mergeEventTimeline(event.timeline || [], reactionLogs),
+    [event.timeline, reactionLogs]
+  );
 
   const isAdmin = user && event.adminId === user.uid;
   const isLive = event.status === 'live';
@@ -486,117 +428,19 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
   const updatePlayerGoal = (teamIndex, playerId, delta) => {
     if (!isAdmin || !isLive || selectedPeriodId === TOTAL_PERIOD_ID) return;
 
-    const normalized = normalizeMatchPeriods(event);
-    const newTeams = normalized.teams;
-    const player = newTeams[teamIndex].players.find(item => item.id === playerId);
+    const team = event.teams?.[teamIndex];
+    if (!team) return;
 
-    if (!player) return;
-
-    const currentGoals = getPlayerGoalsInPeriod(player, selectedPeriodId, normalized.periods);
-    const nextGoals = currentGoals + delta;
-    if (nextGoals < 0) return;
-
-    player.goalsByPeriod = {
-      ...(player.goalsByPeriod || {}),
-      [selectedPeriodId]: nextGoals
-    };
-
-    const now = new Date();
-    const nowTimestamp = now.getTime();
-    const timeString = now.toLocaleTimeString('it-IT', { hour12: false });
-    const goalDateTime = formatGoalDateTime(now);
-    const selectedPeriodName = normalized.periods.find(period => period.id === selectedPeriodId)?.name || '';
-    let goalRecordId = null;
-    const goalHistory = Array.isArray(player.goalHistory) ? [...player.goalHistory] : [];
-
-    if (delta > 0) {
-      goalRecordId = crypto.randomUUID();
-      goalHistory.push({
-        id: goalRecordId,
-        periodId: selectedPeriodId,
-        timestamp: nowTimestamp,
-        dateTime: goalDateTime,
-        status: 'active'
-      });
-    } else if (delta < 0) {
-      // Conserva lo storico: un gol annullato viene marcato, non cancellato.
-      const lastActiveGoalIndex = goalHistory
-        .map((goal, index) => ({ goal, index }))
-        .filter(({ goal }) => goal.periodId === selectedPeriodId && goal.status !== 'cancelled')
-        .sort((a, b) => (Number(b.goal.timestamp) || 0) - (Number(a.goal.timestamp) || 0))[0]?.index;
-
-      if (lastActiveGoalIndex !== undefined) {
-        goalRecordId = goalHistory[lastActiveGoalIndex].id;
-        goalHistory[lastActiveGoalIndex] = {
-          ...goalHistory[lastActiveGoalIndex],
-          status: 'cancelled',
-          cancelledAt: nowTimestamp,
-          cancelledDateTime: goalDateTime
-        };
-      }
-    }
-
-    player.goalHistory = goalHistory;
-    player.goals = getPlayerTotalGoals(player, normalized.periods);
-
-    let newTimeline = event.timeline || [];
-    const eventUpdates = {
-      periods: normalized.periods,
-      teams: newTeams
-    };
-
-    if (delta > 0) {
-      const isOperaTeam = newTeams[teamIndex].name.toLowerCase().includes('opera');
-      const currentTeamScore = getTeamTotalScore(newTeams[teamIndex], normalized.periods);
-      let customTemplate = null;
-      let nextOperaGoalIndex = event.operaGoalIndex || 0;
-
-      // I messaggi speciali continuano a seguire il totale della partita, non il singolo tempo.
-      if (isOperaTeam && currentTeamScore >= 4) {
-        customTemplate = OPERA_GOAL_TEMPLATES[nextOperaGoalIndex];
-        nextOperaGoalIndex = (nextOperaGoalIndex + 1) % OPERA_GOAL_TEMPLATES.length;
-        eventUpdates.operaGoalIndex = nextOperaGoalIndex;
-      }
-
-      newTimeline = [{
-        id: crypto.randomUUID(),
-        type: 'goal',
-        playerName: player.name,
-        teamId: newTeams[teamIndex].id || null,
-        teamName: newTeams[teamIndex].name,
-        periodId: selectedPeriodId,
-        periodName: selectedPeriodName,
-        time: timeString,
-        timestamp: nowTimestamp,
-        dateTime: goalDateTime,
-        goalRecordId,
-        customTemplate,
-        customMessage: customTemplate ? customTemplate.replace(/<giocatore>/g, player.name) : null
-      }, ...newTimeline];
-
-    } else if (delta < 0) {
-      newTimeline = [{
-        id: crypto.randomUUID(),
-        type: 'undo',
-        playerName: player.name,
-        periodId: selectedPeriodId,
-        periodName: selectedPeriodName,
-        time: timeString,
-        timestamp: nowTimestamp,
-        dateTime: goalDateTime,
-        undoesGoalId: goalRecordId
-      }, ...newTimeline];
-    }
-
-    eventUpdates.timeline = newTimeline;
-
-    // Il goal e la reaction ⚽️ vengono salvati atomicamente: il listener
-    // realtime riceve un solo snapshot e attiva l'animazione su tutti i client.
-    const savePromise = delta > 0
-      ? updateEventDataWithGoalReaction(event.id, eventUpdates)
-      : updateEventData(event.id, eventUpdates);
-
-    savePromise.catch(error => {
+    recordPlayerGoal({
+      eventId: event.id,
+      adminUid: user?.uid,
+      teamId: team.id,
+      teamIndex,
+      expectedTeamName: team.name,
+      playerId,
+      periodId: selectedPeriodId,
+      delta
+    }).catch(error => {
       console.error('Impossibile aggiornare la partita:', error);
     });
   };
@@ -607,13 +451,22 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
     updateEventData(event.id, { timeline: newTimeline });
   };
 
+  const deleteReactionLogEntries = async (reactionIds) => {
+    if (!isAdmin) return;
+    try {
+      await deleteReactionLogs(event.id, reactionIds);
+    } catch (error) {
+      console.error('Impossibile eliminare la reazione dalla cronologia:', error);
+    }
+  };
+
   const shareOnWhatsApp = () => {
     const currentPeriods = getEventPeriods(event);
     const messageEvent = normalizeMatchPeriods(event);
     const teamA = messageEvent.teams[0];
     const teamB = messageEvent.teams[1];
 
-    const eventShareDate = getEventShareDate(event, teamA, teamB, currentPeriods);
+    const eventShareDate = getEventShareDate(event);
     let text = `🏆 *${event.title}*\n`;
     if (eventShareDate) text += `📅 ${eventShareDate}\n`;
     text += '\n';
@@ -1142,13 +995,13 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
         </div>
       </div>
 
-      {(event.timeline && event.timeline.length > 0) && (
+      {timelineEntries.length > 0 && (
         <div className="mt-3 bg-slate-800/80 rounded-xl p-4 border border-slate-700 max-h-48 overflow-y-auto">
           <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-3">
             <Clock className="w-4 h-4" /> Cronologia Eventi
           </h3>
           <div className="space-y-2">
-            {event.timeline.map(log => {
+            {timelineEntries.map(log => {
               const renderGoalLog = () => {
                 const template = log.customTemplate;
                 if (template) {
@@ -1200,9 +1053,14 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
 
               return (
                 <div key={log.id} className="flex justify-between items-center text-sm border-b border-slate-700/50 pb-2 group">
-                  <span className="text-slate-300 flex-1 pr-2">
+                  <span className={`${log.source === 'reaction' ? 'text-slate-400' : 'text-slate-300'} flex-1 pr-2`}>
                     {log.type === 'start' && <span>🎬 Mettetevi comodi, allacciate le cinture...comincia la partita!</span>}
                     {log.type === 'end' && <span>🏁 Finisce qui la partita! Col risultato di <span className="font-bold text-white">{log.scoreString}</span></span>}
+                    {log.type === 'reaction' && (
+                      <span className="font-medium text-slate-400">
+                        {getReactionPhrase({ nickname: log.nickname || 'Spettatore', emoji: log.emoji, count: log.count })}
+                      </span>
+                    )}
                     {(!log.type || log.type === 'goal') && renderGoalLog()}
                     {log.type === 'undo' && (
                       <span>
@@ -1215,9 +1073,11 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                     <span className="text-slate-500 font-mono text-xs">{log.time}</span>
                     {isAdmin && (
                       <button
-                        onClick={() => deleteLog(log.id)}
+                        onClick={() => log.source === 'reaction'
+                          ? deleteReactionLogEntries(log.reactionIds || [log.id])
+                          : deleteLog(log.id)}
                         className="text-slate-600 hover:text-red-400 transition-colors md:opacity-0 md:group-hover:opacity-100"
-                        title="Elimina log"
+                        title={log.source === 'reaction' ? 'Elimina reazione' : 'Elimina log'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1330,8 +1190,10 @@ const EventView = memo(function EventView({ event: initialEvent, user }) {
                   count={getEmojiReactionCount(event.reactions, emoji)}
                   animateOnCountChange={false}
                   onClick={() => {
-                    addEmojiReaction(event.id, emoji)
-                      .catch(error => {
+                    addEmojiReaction(event.id, emoji, {
+                      userId: user?.uid,
+                      nickname
+                    }).catch(error => {
                         console.warn('Impossibile registrare la reazione:', error);
                       });
                     setShowEmojiModal(false);

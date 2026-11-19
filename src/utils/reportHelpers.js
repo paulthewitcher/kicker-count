@@ -1,20 +1,9 @@
 import {
   getEventPeriods,
   getPlayerGoalsInPeriod,
-  isNumericPeriod
-} from './helpers';
-
-export const toTimestampMs = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (value instanceof Date) return value.getTime();
-  if (value && typeof value.toMillis === 'function') return value.toMillis();
-  if (value && typeof value.seconds === 'number') return value.seconds * 1000;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = new Date(value).getTime();
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
+  isNumericPeriod,
+  toTimestampMs
+} from './helpers.js';
 
 // La data della partita è il primo avvio registrato nella timeline.
 // createdAt è il fallback per gli eventi legacy senza log di avvio.
