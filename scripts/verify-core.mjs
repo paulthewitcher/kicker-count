@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {
   getPlayerTotalGoals,
   getTeamTotalScore,
-  toTimestampMs
+  toTimestampMs,
+  formatDateTimeLocalInput,
+  parseDateTimeLocalInput
 } from '../src/utils/helpers.js';
 import {
   GOAL_REACTION_EMOJI,
@@ -34,6 +36,9 @@ assert.equal(toTimestampMs(new Date(knownTimestamp)), knownTimestamp);
 assert.equal(toTimestampMs({ seconds: Math.floor(knownTimestamp / 1000), nanoseconds: 0 }), knownTimestamp);
 assert.equal(toTimestampMs({ _seconds: Math.floor(knownTimestamp / 1000), _nanoseconds: 0 }), knownTimestamp);
 assert.equal(toTimestampMs({ toMillis: () => knownTimestamp }), knownTimestamp);
+const localDateTimeValue = formatDateTimeLocalInput(knownTimestamp);
+assert.equal(parseDateTimeLocalInput(localDateTimeValue), knownTimestamp);
+assert.equal(parseDateTimeLocalInput('not-a-date'), null);
 
 // The goal reaction is canonicalised (⚽ and ⚽️) and old counts remain visible.
 assert.equal(normalizeReactionEmoji(LEGACY_GOAL_REACTION_EMOJI), GOAL_REACTION_EMOJI);
@@ -174,7 +179,7 @@ const reportEvent = {
     { id: 'first-start', type: 'start', timestamp: knownTimestamp }
   ]
 };
-assert.equal(getMatchStartTimestamp(reportEvent), knownTimestamp);
+assert.equal(getMatchStartTimestamp({ ...reportEvent, createdAt: makeDate(7, 18, 0).getTime() }), makeDate(7, 18, 0).getTime(), 'editable createdAt is the canonical report date');
 const report = buildPlayerReport([reportEvent], {
   dateFrom: '2026-11-08', dateTo: '2026-11-08',
   player: 'pipp', jersey: '10', team: 'opera', title: 'AMICHEVOLE', host: 'mario',
@@ -208,7 +213,7 @@ const eventWithSpecialGoal = {
   teams: [{ players: [{ goalHistory: [{ id: 'g1', periodId: 'rigori', timestamp: makeDate(8).getTime(), status: 'active' }] }] }],
   timeline: []
 };
-assert.equal(getEventShareDate(eventWithSpecialGoal), '08-11-2026');
+assert.equal(getEventShareDate(eventWithSpecialGoal), '01-11-2026', 'WhatsApp export uses the editable event creation date');
 const eventWithNoActiveGoals = {
   createdAt: makeDate(1).getTime(),
   teams: [{ players: [{ goalHistory: [{ id: 'g1', timestamp: makeDate(8).getTime(), status: 'cancelled' }] }] }],
@@ -233,7 +238,12 @@ const legacyOneGoalRemains = {
     { id: 'goal-1', type: 'goal', playerName: 'Pippo', periodId: 'period-1', timestamp: makeDate(8, 10).getTime() }
   ]
 };
-assert.equal(getEventShareDate(legacyOneGoalRemains), '08-11-2026');
+assert.equal(getEventShareDate(legacyOneGoalRemains), '01-11-2026', 'canonical createdAt takes priority over the first goal');
+const eventWithoutCreatedAt = {
+  teams: [],
+  timeline: [{ id: 'legacy-goal', type: 'goal', timestamp: makeDate(8, 10).getTime() }]
+};
+assert.equal(getEventShareDate(eventWithoutCreatedAt), '08-11-2026', 'legacy events without createdAt retain the first-goal fallback');
 
 
 // Reaction log phrases and timeline grouping: repeated reactions by the same

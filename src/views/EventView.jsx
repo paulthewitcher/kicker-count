@@ -33,6 +33,7 @@ import EditTeamModal from '../components/modals/EditTeamModal';
 import DeletePlayerModal from '../components/modals/DeletePlayerModal';
 import EditPlayerModal from '../components/modals/EditPlayerModal';
 import SwapTeamsModal from '../components/modals/SwapTeamsModal';
+import EditEventDetailsModal from '../components/modals/EditEventDetailsModal';
 
 const TOTAL_PERIOD_ID = 'total';
 
@@ -150,8 +151,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
   const [editPlayerJersey, setEditPlayerJersey] = useState('');
 
   const [editingScore, setEditingScore] = useState({ teamIndex: null, tempScore: '' });
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [tempTitle, setTempTitle] = useState(event.title);
+  const [isEditEventDetailsOpen, setIsEditEventDetailsOpen] = useState(false);
 
   const [showEmojiModal, setShowEmojiModal] = useState(false);
   const [isEditingPeriodName, setIsEditingPeriodName] = useState(false);
@@ -168,22 +168,15 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
   const selectedPeriod = periods.find(period => period.id === selectedPeriodId);
 
   useEffect(() => {
-    setTempTitle(event.title);
-  }, [event.title]);
-
-  useEffect(() => {
     if (selectedPeriodId !== TOTAL_PERIOD_ID && !periods.some(period => period.id === selectedPeriodId)) {
       setSelectedPeriodId(TOTAL_PERIOD_ID);
     }
   }, [periods, selectedPeriodId]);
 
-  const handleTitleSave = () => {
-    if (tempTitle.trim() && tempTitle.trim() !== event.title) {
-      updateEventData(event.id, { title: tempTitle.trim() });
-    } else {
-      setTempTitle(event.title);
-    }
-    setIsEditingTitle(false);
+  const handleEventDetailsSave = async ({ title, createdAt }) => {
+    if (!isAdmin) throw new Error('Solo l’amministratore può modificare i dati dell’evento.');
+    await updateEventData(event.id, { title, createdAt });
+    setIsEditEventDetailsOpen(false);
   };
 
   const openSwapTeamsModal = () => {
@@ -801,29 +794,20 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
         </button>
 
         <div className="text-center mb-5 mt-5 relative group/title flex flex-col items-center px-12">
-          {isAdmin && isEditingTitle ? (
-            <input
-              autoFocus
-              value={tempTitle}
-              onChange={(e) => setTempTitle(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
-              className="text-xl sm:text-2xl font-bold bg-slate-900 border border-slate-600 rounded text-center text-white px-2 py-1 mb-1 focus:outline-none focus:border-emerald-500 w-full max-w-xs mx-auto"
-            />
-          ) : (
-            <div className="flex items-center justify-center gap-2 mb-1 max-w-full">
-              <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{event.title}</h1>
-              {isAdmin && (
-                <button
-                  onClick={() => setIsEditingTitle(true)}
-                  className="text-slate-500 hover:text-emerald-400 md:opacity-0 md:group-hover/title:opacity-100 transition-opacity shrink-0"
-                  title="Modifica nome evento"
-                >
-                  <Edit2 className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center justify-center gap-2 mb-1 max-w-full">
+            <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{event.title}</h1>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsEditEventDetailsOpen(true)}
+                className="text-slate-500 hover:text-emerald-400 md:opacity-0 md:group-hover/title:opacity-100 transition-opacity shrink-0"
+                title="Modifica titolo, data e ora evento"
+                aria-label="Modifica titolo, data e ora evento"
+              >
+                <Edit2 className="w-5 h-5" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center justify-center gap-2 flex-wrap">
             {isLive ? (
               <span className="bg-red-500/20 text-red-400 text-xs font-bold px-2 py-1 rounded border border-red-500/30 flex items-center gap-1">
@@ -1165,6 +1149,14 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
           )}
         </div>
       )}
+
+      <EditEventDetailsModal
+        isOpen={isEditEventDetailsOpen}
+        currentTitle={event.title}
+        currentCreatedAt={event.createdAt}
+        onClose={() => setIsEditEventDetailsOpen(false)}
+        onSave={handleEventDetailsSave}
+      />
 
       <AddPlayerModal
         isOpen={playerModal.isOpen}

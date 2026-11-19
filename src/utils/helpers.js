@@ -103,6 +103,25 @@ export const toTimestampMs = (value) => {
   return null;
 };
 
+// Converte un timestamp in un valore locale adatto a <input type="datetime-local">.
+export const formatDateTimeLocalInput = (value) => {
+  const timestamp = toTimestampMs(value);
+  if (timestamp === null) return '';
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = part => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+// I valori datetime-local non contengono un fuso: vengono interpretati
+// nell'ora locale del dispositivo, coerentemente con la data mostrata in app.
+export const parseDateTimeLocalInput = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = new Date(value);
+  const timestamp = parsed.getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
 export const formatTimestamp = (value) => {
   const timestamp = toTimestampMs(value);
   if (timestamp === null) return '';

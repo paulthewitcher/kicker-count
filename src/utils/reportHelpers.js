@@ -5,16 +5,18 @@ import {
   toTimestampMs
 } from './helpers.js';
 
-// La data della partita è il primo avvio registrato nella timeline.
-// createdAt è il fallback per gli eventi legacy senza log di avvio.
+// createdAt è la data canonica e modificabile dell'evento (bacheca/export).
+// La timeline.start resta il fallback per documenti legacy senza createdAt.
 export const getMatchStartTimestamp = (event) => {
+  const createdAt = toTimestampMs(event?.createdAt);
+  if (createdAt !== null) return createdAt;
+
   const startLogs = (event?.timeline || [])
     .filter((log) => log?.type === 'start')
     .map((log) => toTimestampMs(log.timestamp))
     .filter(Number.isFinite);
 
-  if (startLogs.length) return Math.min(...startLogs);
-  return toTimestampMs(event?.createdAt);
+  return startLogs.length ? Math.min(...startLogs) : null;
 };
 
 export const getReportableEvents = (events = []) => (events || []).filter((event) => (

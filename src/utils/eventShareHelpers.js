@@ -25,11 +25,14 @@ export const formatShareDate = (timestamp) => {
 };
 
 /**
- * Returns the date of the first active goal in any period. If no active goal
- * is available (0-0 / all goals cancelled), it falls back to event.createdAt.
- * Supports both current goalHistory records and legacy timeline-only records.
+ * The editable event date (createdAt) is the canonical date used in the
+ * dashboard and WhatsApp export. For legacy documents without createdAt,
+ * fall back to the earliest active goal in goalHistory/timeline.
  */
 export const getEventShareDate = (event) => {
+  const canonicalCreatedAt = toTimestampMs(event?.createdAt);
+  if (canonicalCreatedAt !== null) return formatShareDate(canonicalCreatedAt);
+
   const timeline = Array.isArray(event?.timeline) ? event.timeline : [];
   const cancelledGoalIds = new Set(
     timeline

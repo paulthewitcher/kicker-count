@@ -172,14 +172,14 @@ const ReportsView = memo(function ReportsView({ events, seed, goBack }) {
 
         <div className="grid grid-cols-2 gap-2.5">
           <label className="min-w-0">
-            <span className="block text-[11px] text-slate-400 mb-1">Data partita da</span>
+            <span className="block text-[11px] text-slate-400 mb-1">Data evento da</span>
             <span className="relative block">
               <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
               <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined} onChange={(e) => updateFilter('dateFrom', e.target.value)} className="w-full min-w-0 bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-2 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 [color-scheme:dark]" />
             </span>
           </label>
           <label className="min-w-0">
-            <span className="block text-[11px] text-slate-400 mb-1">Data partita a</span>
+            <span className="block text-[11px] text-slate-400 mb-1">Data evento a</span>
             <span className="relative block">
               <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
               <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined} onChange={(e) => updateFilter('dateTo', e.target.value)} className="w-full min-w-0 bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-2 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 [color-scheme:dark]" />
