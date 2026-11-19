@@ -272,14 +272,35 @@ export const addEmojiReaction = async (eventId, type, { userId, nickname } = {})
     time: now.toLocaleTimeString('it-IT', { hour12: false })
   };
 
-  const writePromise = runTransaction(db, async (transaction) => {
-    const eventSnap = await transaction.get(eventRef);
-    if (!eventSnap.exists()) throw new Error('Partita non trovata.');
-    const reactions = { ...(eventSnap.data().reactions || {}) };
-    reactions[canonicalEmoji] = (Number(reactions[canonicalEmoji]) || 0) + 1;
-    transaction.update(eventRef, { reactions });
-    transaction.set(reactionRef, reactionLog);
-  });
+  // Le due scritture sono intenzionalmente separate.
+  // L'aggiornamento del contatore deve poter riuscire anche quando le Rules
+  // della sottocollection reactionLogs non sono ancora state pubblicate.
+  // In precedenza entrambe le scritture erano nella stessa transazione:
+  // un rifiuto della sola creazione del log annullava anche il contatore,
+  // impedendo aggiornamento realtime e animazione.
+  const writePromise = (async () => {
+    await runTransaction(db, async (transaction) => {
+      const eventSnap = await transaction.get(eventRef);
+      if (!eventSnap.exists()) throw new Error('Partita non trovata.');
+      const reactions = { ...(eventSnap.data().reactions || {}) };
+      reactions[canonicalEmoji] = (Number(reactions[canonicalEmoji]) || 0) + 1;
+      transaction.update(eventRef, { reactions });
+    });
+
+    try {
+      await setDoc(reactionRef, reactionLog);
+      return { counterUpdated: true, logSaved: true };
+    } catch (logError) {
+      // Non annulliamo una reazione già conteggiata. La UI mostrerà un
+      // messaggio che distingue il problema di permessi sui log.
+      console.error('Contatore reazioni aggiornato, ma log non salvato:', logError);
+      return {
+        counterUpdated: true,
+        logSaved: false,
+        logErrorCode: logError?.code || 'unknown'
+      };
+    }
+  })();
 
   await trackEventWrite(eventId, writePromise);
   return writePromise;

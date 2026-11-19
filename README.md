@@ -222,3 +222,17 @@ Il nickname è quello scelto nel form di accesso: Firebase Anonymous Authenticat
 - Le squadre con qualsiasi altro nome registrano normalmente il goal, ma non attivano la reazione automatica del pallone.
 - Le reazioni emoji manuali degli utenti restano disponibili per tutte le squadre e non sono state modificate.
 - Nessuna modifica a Firestore, alle regole di sicurezza o alla struttura dei documenti.
+
+## V27 — robustezza delle reazioni
+
+Il contatore `reactions` e i log della sottocollection `reactionLogs` vengono ora scritti in due fasi separate. La prima fase aggiorna il contatore con una transazione Firestore; la seconda crea il log. Se le Rules per `reactionLogs` non sono ancora state pubblicate, il contatore e l'animazione realtime continuano a funzionare e la schermata avvisa che il log non è stato salvato. Se le Rules negano invece l'aggiornamento del contatore, viene mostrato un messaggio specifico.
+
+Per avere anche le voci nella cronologia è necessario che le Firestore Rules attive includano il blocco `match /reactionLogs/{reactionId}` presente nel file `firestore.rules` di questo pacchetto. Se sono già state pubblicate le Rules V25/V26 con la sottocollection, non serve modificarle nuovamente.
+
+Verifiche locali senza dipendenze aggiuntive:
+
+```bash
+npm run test:core
+```
+
+Il test include controlli statici sul flusso separato contatore/log e sui permessi attesi nel file Rules. Non sostituisce un test sul database Firebase remoto.

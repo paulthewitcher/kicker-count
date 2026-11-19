@@ -1,21 +1,15 @@
-# KickerLive V25 — regole Firestore per i log delle reazioni
+# KickerLive — log delle reazioni Firestore
 
-La V25 registra ogni reazione manuale in una sottocollection:
+Percorso: `artifacts/kicker-app-id/public/data/events/{eventId}/reactionLogs/{reactionId}`.
 
-`artifacts/kicker-app-id/public/data/events/{eventId}/reactionLogs/{reactionId}`
+Ogni log contiene `uid`, `nickname`, `emoji`, `timestamp` e `time`. Le reazioni sono mostrate nella cronologia fondendo la sottocollection con la `timeline` ufficiale; non vengono scritte nella `timeline` della partita.
 
-Il documento contiene soltanto `uid`, `nickname`, `emoji`, `timestamp` e `time`.
+## Flusso V27
 
-- Gli utenti autenticati (inclusi gli spettatori anonimi) possono leggere e creare reazioni.
-- La creazione richiede che `uid` coincida con `request.auth.uid`, nickname massimo 15 caratteri e una delle 20 emoji ammesse.
-- Solo l'amministratore del documento partita può eliminare i log.
-- I log delle reazioni non vengono aggiunti al campo `timeline`: la UI fonde le due sorgenti per mostrare una cronologia unica.
-- La cancellazione della partita elimina prima i documenti della sottocollection, perché Firestore non elimina automaticamente i documenti figli.
+1. Il contatore `reactions` viene incrementato con una transazione sul documento partita.
+2. Il documento `reactionLogs` viene creato con una seconda scrittura.
+3. Se la seconda scrittura viene negata, il contatore e l'animazione realtime non vengono annullati; la UI mostra un avviso che richiede la pubblicazione delle Rules corrette.
 
-## Pubblicazione
+Questa separazione evita che una regola mancante sulla sottocollection blocchi anche il contatore. Per visualizzare e registrare le voci della cronologia, le Rules devono comunque autorizzare `get/list` e `create` sulla sottocollection.
 
-Se hai già pubblicato le regole V24, sostituiscile con il file `firestore.rules` aggiornato contenuto in questo pacchetto e premi Publish in Firestore → Rules. Senza questa modifica, le nuove letture/scritture della sottocollection saranno rifiutate dalle regole V24.
-
-Le regole mantengono le autorizzazioni V24: lettura dei documenti evento per gli utenti autenticati, scritture del documento partita riservate all'amministratore salvo il solo campo `reactions`.
-
-Il nickname proviene dal nickname scelto nel form d'ingresso e non è un'identità verificata: Firebase Anonymous Authentication identifica l'UID del dispositivo/sessione, ma non autentica il nome visualizzato.
+Gli utenti autenticati (inclusi quelli con Anonymous Authentication) possono leggere e creare reazioni; la creazione vincola `uid` a `request.auth.uid`, limita il nickname a 15 caratteri e accetta soltanto le 20 emoji configurate. Solo l'amministratore della partita può cancellare i log.

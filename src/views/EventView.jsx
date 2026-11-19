@@ -100,6 +100,8 @@ const getPeriodShareName = (period) => {
 const EventView = memo(function EventView({ event: initialEvent, user, nickname }) {
   const [event, setEvent] = useState(initialEvent);
   const [reactionLogs, setReactionLogs] = useState([]);
+  const [reactionLogsUnavailable, setReactionLogsUnavailable] = useState(false);
+  const [reactionFeedback, setReactionFeedback] = useState('');
 
   useEffect(() => {
     const unsubscribe = subscribeToSingleEvent(initialEvent.id, (updatedEvent) => {
@@ -113,8 +115,14 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
     setReactionLogs([]);
     const unsubscribe = subscribeToReactionLogs(
       initialEvent.id,
-      setReactionLogs,
-      (err) => console.warn('Impossibile sincronizzare le reazioni nella cronologia:', err)
+      (logs) => {
+        setReactionLogs(logs);
+        setReactionLogsUnavailable(false);
+      },
+      (err) => {
+        console.warn('Impossibile sincronizzare le reazioni nella cronologia:', err);
+        if (err?.code === 'permission-denied') setReactionLogsUnavailable(true);
+      }
     );
     return () => unsubscribe();
   }, [initialEvent.id]);
@@ -445,6 +453,31 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
     });
   };
 
+  const handleEmojiReaction = async (emoji) => {
+    setShowEmojiModal(false);
+    setReactionFeedback('');
+
+    try {
+      const result = await addEmojiReaction(event.id, emoji, {
+        userId: user?.uid,
+        nickname
+      });
+
+      if (result?.counterUpdated && result?.logSaved === false) {
+        setReactionFeedback(
+          'Reazione conteggiata, ma non aggiunta alla cronologia. Pubblica le Firestore Rules aggiornate per la sottocollection reactionLogs.'
+        );
+      }
+    } catch (error) {
+      console.error('Impossibile registrare la reazione:', error);
+      setReactionFeedback(
+        error?.code === 'permission-denied'
+          ? 'Firestore ha rifiutato il contatore delle reazioni. Verifica le Rules del documento evento.'
+          : (error?.message || 'Impossibile inviare la reazione. Riprova.')
+      );
+    }
+  };
+
   const deleteLog = (logId) => {
     if (!isAdmin) return;
     const newTimeline = (event.timeline || []).filter(log => log.id !== logId);
@@ -727,6 +760,21 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
 
   return (
     <div className="animate-in slide-in-from-right-4 duration-300 flex flex-col min-h-[85vh]">
+      {(reactionFeedback || reactionLogsUnavailable) && (
+        <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 flex items-start gap-2">
+          <span className="flex-1">
+            {reactionFeedback || 'Le reazioni vengono conteggiate, ma Firestore non consente di leggere reactionLogs. Pubblica le Rules aggiornate per visualizzarle nella cronologia.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => { setReactionFeedback(''); setReactionLogsUnavailable(false); }}
+            className="text-amber-200/70 hover:text-amber-100"
+            aria-label="Chiudi avviso"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       <div className="bg-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl border border-slate-700 relative flex-1 flex flex-col">
         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 via-emerald-500 to-blue-500 opacity-80 rounded-t-3xl"></div>
 
@@ -1189,15 +1237,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
                   index={index}
                   count={getEmojiReactionCount(event.reactions, emoji)}
                   animateOnCountChange={false}
-                  onClick={() => {
-                    addEmojiReaction(event.id, emoji, {
-                      userId: user?.uid,
-                      nickname
-                    }).catch(error => {
-                        console.warn('Impossibile registrare la reazione:', error);
-                      });
-                    setShowEmojiModal(false);
-                  }}
+                  onClick={() => handleEmojiReaction(emoji)}
                 />
               ))}
             </div>
