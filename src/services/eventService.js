@@ -297,7 +297,8 @@ export const addEmojiReaction = async (eventId, type, { userId, nickname } = {})
       return {
         counterUpdated: true,
         logSaved: false,
-        logErrorCode: logError?.code || 'unknown'
+        logErrorCode: logError?.code || 'unknown',
+        logErrorMessage: logError?.message || 'Errore non specificato durante il salvataggio della reazione.'
       };
     }
   })();

@@ -121,7 +121,8 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
       },
       (err) => {
         console.warn('Impossibile sincronizzare le reazioni nella cronologia:', err);
-        if (err?.code === 'permission-denied') setReactionLogsUnavailable(true);
+        setReactionLogsUnavailable(true);
+        setReactionFeedback(`Lettura reactionLogs non riuscita (${err?.code || 'unknown'}): ${err?.message || 'verifica le Firestore Rules.'}`);
       }
     );
     return () => unsubscribe();
@@ -464,8 +465,10 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
       });
 
       if (result?.counterUpdated && result?.logSaved === false) {
+        const code = result.logErrorCode || 'unknown';
+        const detail = result.logErrorMessage || 'Errore non specificato.';
         setReactionFeedback(
-          'Reazione conteggiata, ma non aggiunta alla cronologia. Pubblica le Firestore Rules aggiornate per la sottocollection reactionLogs.'
+          `Reazione conteggiata, ma log non salvato (${code}): ${detail}`
         );
       }
     } catch (error) {
@@ -763,7 +766,7 @@ const EventView = memo(function EventView({ event: initialEvent, user, nickname 
       {(reactionFeedback || reactionLogsUnavailable) && (
         <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 flex items-start gap-2">
           <span className="flex-1">
-            {reactionFeedback || 'Le reazioni vengono conteggiate, ma Firestore non consente di leggere reactionLogs. Pubblica le Rules aggiornate per visualizzarle nella cronologia.'}
+            {reactionFeedback || 'Firestore non consente di leggere reactionLogs. Verifica le Rules della sottocollection.'}
           </span>
           <button
             type="button"

@@ -236,3 +236,9 @@ npm run test:core
 ```
 
 Il test include controlli statici sul flusso separato contatore/log e sui permessi attesi nel file Rules. Non sostituisce un test sul database Firebase remoto.
+
+## V28 — diagnostica reactionLogs
+
+La creazione dei log di reazione ora restituisce alla UI il codice e il messaggio effettivi dell'errore Firestore, invece di mostrare sempre un invito generico a ripubblicare le Rules. Le Rules incluse accettano anche le varianti legacy delle emoji pallone e fulmine, timestamp di tipo `number` (int o float) e nickname UTF-8 compatibili con il limite client di 15 unità UTF-16.
+
+Dopo aver pubblicato `firestore.rules`, prova una reazione da un dispositivo spettatore. Se il log viene ancora rifiutato, il messaggio mostrerà il codice e il dettaglio restituiti da Firestore, utili per restringere la diagnosi.

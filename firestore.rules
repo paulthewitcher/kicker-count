@@ -74,12 +74,16 @@ service cloud.firestore {
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.nickname is string
           && request.resource.data.nickname.size() > 0
-          && request.resource.data.nickname.size() <= 15
+          && request.resource.data.nickname.size() <= 60
+          && request.resource.data.emoji is string
+          && request.resource.data.emoji.size() <= 8
           && request.resource.data.emoji in [
-            '⚽️', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳',
-            '🥶', '🤯', '😴', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '🌈'
+            // Varianti canoniche attuali e varianti legacy senza U+FE0F.
+            '⚽️', '⚽', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳',
+            '🥶', '🤯', '😴', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '⚡', '🌈'
           ]
-          && request.resource.data.timestamp is int
+          // Il client Firebase può serializzare i numeri JS come int o float.
+          && request.resource.data.timestamp is number
           && request.resource.data.time is string
           && request.resource.data.time.size() <= 16;
 
