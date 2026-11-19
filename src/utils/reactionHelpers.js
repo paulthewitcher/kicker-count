@@ -1,27 +1,5 @@
-const REACTION_PHRASES = {
-  '⚽️': 'ha portato il pallone in campo',
-  '⚽': 'ha portato il pallone in campo',
-  '👎': 'non è convinto',
-  '👍': 'approva',
-  '🫶': 'manda un po’ d’amore',
-  '👏': 'applaude la giocata',
-  '💪': 'carica la squadra',
-  '😃': 'sorride',
-  '🤣': 'si sta sbellicando',
-  '🤩': 'è entusiasta',
-  '🥳': 'è già in festa',
-  '🥶': 'sente il gelo',
-  '🤯': 'è senza parole',
-  '😴': 'si sta addormentando',
-  '🔥': 'accende la partita',
-  '🍻': 'brinda alla partita',
-  '🎉': 'festeggia',
-  '✨': 'porta un po’ di magia',
-  '🌟': 'illumina la serata',
-  '⚡️': 'porta una scarica di energia',
-  '⚡': 'porta una scarica di energia',
-  '🌈': 'porta un arcobaleno di buonumore'
-};
+import { REACTION_PHRASES } from './constants.js';
+
 
 export const getReactionPhrase = ({ nickname, emoji, count = 1 } = {}) => {
   const safeName = String(nickname || 'Spettatore').trim() || 'Spettatore';

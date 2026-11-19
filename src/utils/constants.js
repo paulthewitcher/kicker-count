@@ -18,6 +18,31 @@ export const LEGACY_GOAL_REACTION_EMOJI = '⚽';
 
 export const EMOJI_LIST = ['⚽️', '👎', '👍', '🫶', '👏', '💪', '😃', '🤣', '🤩', '🥳', '🥶', '🤯', '😴', '🔥', '🍻', '🎉', '✨', '🌟', '⚡️', '🌈'];
 
+export const REACTION_PHRASES = {
+  '⚽️': 'ha portato il pallone in campo',
+  '⚽': 'ha portato il pallone in campo',
+  '👎': 'non è convinto',
+  '👍': 'approva',
+  '🫶': 'manda un po’ d’amore',
+  '👏': 'applaude la giocata',
+  '💪': 'carica la squadra',
+  '😃': 'sorride',
+  '🤣': 'si sta sbellicando',
+  '🤩': 'è entusiasta',
+  '🥳': 'è già in festa',
+  '🥶': 'sente il gelo',
+  '🤯': 'è senza parole',
+  '😴': 'si sta addormentando',
+  '🔥': 'accende la partita',
+  '🍻': 'brinda alla partita',
+  '🎉': 'festeggia',
+  '✨': 'porta un po’ di magia',
+  '🌟': 'illumina la serata',
+  '⚡️': 'porta una scarica di energia',
+  '⚡': 'porta una scarica di energia',
+  '🌈': 'porta un arcobaleno di buonumore'
+};
+
 export const normalizeReactionEmoji = (emoji) => (
   emoji === GOAL_REACTION_EMOJI || emoji === LEGACY_GOAL_REACTION_EMOJI
     ? GOAL_REACTION_EMOJI
